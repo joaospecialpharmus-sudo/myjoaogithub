@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
+    "pdfjs-dist": "^6.5.438",
     "qrcode": "^1.5.4"
   },
   "engines": {

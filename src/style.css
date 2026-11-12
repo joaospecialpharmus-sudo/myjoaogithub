@@ -591,3 +591,44 @@ textarea {
   display: block;
   margin: 18px auto 0;
 }
+.import-dialog {
+  width: 820px;
+  max-width: calc(100% - 24px);
+  max-height: 90dvh;
+  overflow: auto;
+}
+.import-dialog p {
+  font-size: 12px;
+}
+.import-row {
+  border: 1px solid #dce3d7;
+  border-radius: 8px;
+  padding: 15px;
+  margin: 15px 0;
+}
+.include {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+.include input {
+  width: auto;
+  flex-shrink: 0;
+  margin: 2px 0;
+}
+.import-rows {
+  margin-top: 20px;
+}
+#import-error {
+  color: #a33434;
+  font-size: 12px;
+}
+#import-status {
+  color: #175c49;
+}
+.import-row .include {
+  font-weight: 600;
+}
+.import-dialog fieldset p {
+  font-size: 11px;
+}

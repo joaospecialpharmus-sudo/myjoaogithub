@@ -1,4 +1,5 @@
 import "./style.css";
+import { openStatementImport } from "./import-ui.js";
 import { totals, toCents } from "./finance.js";
 import { discount, offerState, validateOfferDates } from "./debts.js";
 import {
@@ -43,21 +44,37 @@ function message(text) {
   const target = document.querySelector("#page-error");
   if (target) target.textContent = text;
 }
+async function readAll(table, order) {
+  const rows = [];
+  for (let offset = 0; ; offset += 500) {
+    const batch = await secureQuery(
+      client
+        .from(table)
+        .select("*")
+        .order(order)
+        .order("id")
+        .range(offset, offset + 499),
+    );
+    if (!isVerified()) return [];
+    rows.push(...batch);
+    if (batch.length < 500) return rows;
+  }
+}
 async function load() {
   const results = await Promise.all([
-    secureQuery(
-      client.from("entries").select("*").order("date", { ascending: false }),
-    ),
-    secureQuery(client.from("debts").select("*").order("creditor")),
-    secureQuery(
-      client
-        .from("debt_offers")
-        .select("*")
-        .order("observed_on", { ascending: false }),
-    ),
+    readAll("entries", "date"),
+    readAll("debts", "creditor"),
+    readAll("debt_offers", "observed_on"),
   ]);
   if (!isVerified()) return;
   [items, debts, offers] = results;
+  items.sort(
+    (a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id),
+  );
+  offers.sort(
+    (a, b) =>
+      b.observed_on.localeCompare(a.observed_on) || a.id.localeCompare(b.id),
+  );
   render();
 }
 async function action(button, fn) {
@@ -114,10 +131,25 @@ const dialog = (id, title, body, submit) =>
   `<dialog id="${id}"><form><div class="section-head"><h2>${title}</h2><button type="button" data-close aria-label="Fechar">×</button></div>${body}<p class="form-error" role="alert"></p><button type="submit" class="primary">${submit}</button></form></dialog>`;
 function render() {
   document.querySelector("#app").innerHTML =
-    `<aside><a class="brand" href="#">a dois<span>●</span></a><p>FINANÇAS DA CASA</p><nav><button data-view="overview" class="${view === "overview" ? "active" : ""}">◫ &nbsp; Visão do mês</button><button data-view="debts" class="${view === "debts" ? "active" : ""}">⇄ &nbsp; Dívidas e propostas</button></nav><div class="aside-bottom">Um plano em comum.<br>Uma vida mais leve.<small>Espaço privado do casal</small><button id="logout">Sair com segurança</button></div></aside><main><header><div><span class="eyebrow">SEU DINHEIRO, EM SINTONIA</span><h1>${view === "overview" ? "Visão do mês" : "Dívidas e propostas"}</h1><p>Clareza para cuidar do presente e planejar juntos.</p></div>${view === "overview" ? `<label class="month">Período<input id="month" type="month" value="${month}" required></label>` : ""}</header><div class="mobile-nav"><button data-view="overview">Visão do mês</button><button data-view="debts">Dívidas</button><button data-logout>Sair</button></div><section class="notice"><span>Sessão com dois fatores. Saída automática após 15 minutos sem atividade.</span><div><button id="refresh">Atualizar</button><button id="export">Exportar dados ↓</button><button id="password">Alterar senha</button></div></section><p id="page-error" role="alert"></p>${view === "overview" ? overview() : debtView()}<footer>A dois · Cada escolha conta.</footer></main>${dialog("entry-dialog", "Novo lançamento", `<label>Descrição<input name="name" required maxlength="100" placeholder="Ex.: salário, conta de luz"></label><div class="form-grid"><label>Tipo<select name="type"><option value="expense">Despesa</option><option value="income">Recebimento</option></select></label><label>Valor (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" required></label><label>Data / vencimento<input name="date" type="date" value="${localDate()}" required></label><label>Situação<select name="status"><option value="pending">Previsto / pendente</option><option value="done">Recebido / pago</option></select></label><label>Responsável<select name="person">${people}</select></label><label>Categoria<select name="category">${categories.map((c) => `<option>${c}</option>`).join("")}</select></label></div>`, "Salvar lançamento")}${dialog("debt-dialog", "Cadastrar dívida", `<label>Credor<input name="creditor" required maxlength="100"></label><div class="form-grid"><label>Valor total de referência (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" required></label><label>Responsável<select name="person">${people}</select></label></div><label>Observações (sem CPF ou senha do Serasa)<textarea name="notes" maxlength="1000"></textarea></label>`, "Salvar dívida")}${dialog("offer-dialog", "Registrar proposta", `<input name="debt_id" type="hidden"><p>Preencha o total da proposta, incluindo todas as parcelas e a entrada, se houver.</p><div class="form-grid"><label>Valor total proposto (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" required></label><label>Número de parcelas<input name="installments" type="number" min="1" max="600" value="1" required></label><label>Data da consulta<input name="observed_on" type="date" value="${localDate()}" required></label><label>Válida até (opcional)<input name="valid_until" type="date"></label></div><label>Canal e condições da proposta<textarea name="notes" maxlength="1000" placeholder="Ex.: consulta manual no Serasa; condições de entrada"></textarea></label>`, "Salvar proposta")}${dialog("password-dialog", "Alterar senha", '<label>Nova senha<input name="password" type="password" autocomplete="new-password" minlength="14" maxlength="128" required></label><p>Use uma senha exclusiva com pelo menos 14 caracteres. Após a alteração, todas as suas sessões serão encerradas.</p>', "Alterar e sair")}`;
+    `<aside><a class="brand" href="#">a dois<span>●</span></a><p>FINANÇAS DA CASA</p><nav><button data-view="overview" class="${view === "overview" ? "active" : ""}">◫ &nbsp; Visão do mês</button><button data-view="debts" class="${view === "debts" ? "active" : ""}">⇄ &nbsp; Dívidas e propostas</button></nav><div class="aside-bottom">Um plano em comum.<br>Uma vida mais leve.<small>Espaço privado do casal</small><button id="logout">Sair com segurança</button></div></aside><main><header><div><span class="eyebrow">SEU DINHEIRO, EM SINTONIA</span><h1>${view === "overview" ? "Visão do mês" : "Dívidas e propostas"}</h1><p>Clareza para cuidar do presente e planejar juntos.</p></div>${view === "overview" ? `<label class="month">Período<input id="month" type="month" value="${month}" required></label>` : ""}</header><div class="mobile-nav"><button data-view="overview">Visão do mês</button><button data-view="debts">Dívidas</button><button data-logout>Sair</button></div><section class="notice"><span>Sessão com dois fatores. Saída automática após 15 minutos sem atividade.</span><div><button id="import-pdf">Importar fatura PDF</button><button id="refresh">Atualizar</button><button id="export">Exportar dados ↓</button><button id="password">Alterar senha</button></div></section><p id="page-error" role="alert"></p>${view === "overview" ? overview() : debtView()}<footer>A dois · Cada escolha conta.</footer></main>${dialog("entry-dialog", "Novo lançamento", `<label>Descrição<input name="name" required maxlength="100" placeholder="Ex.: salário, conta de luz"></label><div class="form-grid"><label>Tipo<select name="type"><option value="expense">Despesa</option><option value="income">Recebimento</option></select></label><label>Valor (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" required></label><label>Data / vencimento<input name="date" type="date" value="${localDate()}" required></label><label>Situação<select name="status"><option value="pending">Previsto / pendente</option><option value="done">Recebido / pago</option></select></label><label>Responsável<select name="person">${people}</select></label><label>Categoria<select name="category">${categories.map((c) => `<option>${c}</option>`).join("")}</select></label></div>`, "Salvar lançamento")}${dialog("debt-dialog", "Cadastrar dívida", `<label>Credor<input name="creditor" required maxlength="100"></label><div class="form-grid"><label>Valor total de referência (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" required></label><label>Responsável<select name="person">${people}</select></label></div><label>Observações (sem CPF ou senha do Serasa)<textarea name="notes" maxlength="1000"></textarea></label>`, "Salvar dívida")}${dialog("offer-dialog", "Registrar proposta", `<input name="debt_id" type="hidden"><p>Preencha o total da proposta, incluindo todas as parcelas e a entrada, se houver.</p><div class="form-grid"><label>Valor total proposto (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" required></label><label>Número de parcelas<input name="installments" type="number" min="1" max="600" value="1" required></label><label>Data da consulta<input name="observed_on" type="date" value="${localDate()}" required></label><label>Válida até (opcional)<input name="valid_until" type="date"></label></div><label>Canal e condições da proposta<textarea name="notes" maxlength="1000" placeholder="Ex.: consulta manual no Serasa; condições de entrada"></textarea></label>`, "Salvar proposta")}${dialog("password-dialog", "Alterar senha", '<label>Nova senha<input name="password" type="password" autocomplete="new-password" minlength="14" maxlength="128" required></label><p>Use uma senha exclusiva com pelo menos 14 caracteres. Após a alteração, todas as suas sessões serão encerradas.</p>', "Alterar e sair")}`;
   bind();
 }
 function bind() {
+  document.querySelector("#import-pdf").onclick = () =>
+    openStatementImport({
+      getEntries: () => items,
+      onSave: async (entries) => {
+        if (!isVerified()) throw Error("Entre novamente antes de importar.");
+        await secureQuery(
+          client
+            .from("entries")
+            .upsert(entries, { onConflict: "id", ignoreDuplicates: true }),
+        );
+        if (!isVerified()) return;
+        month = entries[0].date.slice(0, 7);
+        await load();
+      },
+    });
   document.querySelector("#logout").onclick = logout;
   document.querySelector("[data-logout]").onclick = logout;
   document.querySelectorAll("[data-view]").forEach(
@@ -149,48 +181,42 @@ function bind() {
     document.querySelector("#password-dialog").showModal();
   bindForm("entry-dialog", async (f) =>
     secureQuery(
-      client
-        .from("entries")
-        .insert({
-          id: crypto.randomUUID(),
-          name: f.get("name").trim(),
-          type: f.get("type"),
-          cents: toCents(f.get("amount")),
-          date: f.get("date"),
-          status: f.get("status"),
-          person: f.get("person"),
-          category: f.get("category"),
-        }),
+      client.from("entries").insert({
+        id: crypto.randomUUID(),
+        name: f.get("name").trim(),
+        type: f.get("type"),
+        cents: toCents(f.get("amount")),
+        date: f.get("date"),
+        status: f.get("status"),
+        person: f.get("person"),
+        category: f.get("category"),
+      }),
     ),
   );
   bindForm("debt-dialog", async (f) =>
     secureQuery(
-      client
-        .from("debts")
-        .insert({
-          id: crypto.randomUUID(),
-          creditor: f.get("creditor").trim(),
-          original_cents: toCents(f.get("amount")),
-          person: f.get("person"),
-          status: "open",
-          notes: f.get("notes").trim(),
-        }),
+      client.from("debts").insert({
+        id: crypto.randomUUID(),
+        creditor: f.get("creditor").trim(),
+        original_cents: toCents(f.get("amount")),
+        person: f.get("person"),
+        status: "open",
+        notes: f.get("notes").trim(),
+      }),
     ),
   );
   bindForm("offer-dialog", async (f) => {
     validateOfferDates(f.get("observed_on"), f.get("valid_until"));
     await secureQuery(
-      client
-        .from("debt_offers")
-        .insert({
-          id: crypto.randomUUID(),
-          debt_id: f.get("debt_id"),
-          total_cents: toCents(f.get("amount")),
-          installments: Number(f.get("installments")),
-          observed_on: f.get("observed_on"),
-          valid_until: f.get("valid_until") || null,
-          notes: f.get("notes").trim(),
-        }),
+      client.from("debt_offers").insert({
+        id: crypto.randomUUID(),
+        debt_id: f.get("debt_id"),
+        total_cents: toCents(f.get("amount")),
+        installments: Number(f.get("installments")),
+        observed_on: f.get("observed_on"),
+        valid_until: f.get("valid_until") || null,
+        notes: f.get("notes").trim(),
+      }),
     );
   });
   document.querySelector("#password-dialog form").onsubmit = async (e) => {

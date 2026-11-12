@@ -42,6 +42,16 @@ Os testes RLS rodam num PostgreSQL local via PGlite; os testes de navegador simu
 
 ## Limites
 
-Sem integração automática Serasa, importação bancária/PDF, IA, saldo inicial, recorrências, notificações, PWA offline ou restauração de exportações. Propostas são registros manuais: confirme disponibilidade nos canais oficiais antes de negociar. Dívidas e propostas não geram despesas automaticamente; cadastre os pagamentos/parcelas para evitar duplicidade. Nenhum CPF, número de telefone ou senha do Serasa é necessário.
+Sem integração automática Serasa, integração bancária automática, IA, saldo inicial, recorrências, notificações, PWA offline ou restauração de exportações. Propostas são registros manuais: confirme disponibilidade nos canais oficiais antes de negociar. Dívidas e propostas não geram despesas automaticamente; cadastre os pagamentos/parcelas para evitar duplicidade. Nenhum CPF, número de telefone ou senha do Serasa é necessário.
 
 Não publique dados pessoais, arquivos `.env`, exportações ou credenciais no GitHub. Confira também [os componentes pesquisados](docs/componentes.md).
+
+## Importar faturas PDF
+
+Após entrar com MFA, clique em **Importar fatura PDF**, selecione o arquivo, banco, responsável, mês e vencimento. A leitura ocorre no navegador com PDF.js. Revise descrições, valores e categorias; desmarque o que não deseja importar e confirme antes de salvar. O banco recebe somente as linhas selecionadas, nunca o PDF, senha ou texto completo. Não há mudança de schema necessária.
+
+Esta é uma extração inicial por linhas com data e um valor em reais, não uma integração oficial dos bancos. Reconhece datas numéricas e meses em português, mas ainda não foi validada com faturas reais do C6, Itaú, Nubank ou Caixa. Layouts com colunas, texto quebrado, moedas estrangeiras e outros formatos podem não ser reconhecidos. PDFs somente com imagens precisam de OCR, ainda não implementado. Limites: 15 MB, 60 páginas e 500 compras candidatas. PDF protegido solicita a senha somente no aparelho.
+
+A data financeira das compras é o vencimento informado; a data original fica na descrição. Parcelas presentes no PDF entram como linhas individuais; não são geradas parcelas futuras. Créditos/estornos e pagamentos não são importados automaticamente. Confira o resultado com a fatura, incluindo esses ajustes. Não cadastre o pagamento integral da fatura junto com suas compras como outra despesa.
+
+A mesma linha do mesmo arquivo usa ID estável e não é inserida novamente; PDFs reexportados podem mudar e a detecção entre arquivos é apenas uma sugestão por descrição, valor, data e responsável. Compras legítimas iguais podem ser sinalizadas: revise antes de confirmar. Testes de PDF usam somente documentos sintéticos (inclusive fixture com senha), nunca documentos pessoais no GitHub.

@@ -67,7 +67,9 @@ async function setup(page, { member = true, badCode = false } = {}) {
     ])
       if (path.endsWith("/" + table)) {
         if (r.method() === "POST") {
-          rows.push(r.postDataJSON());
+          const body = r.postDataJSON();
+          for (const row of Array.isArray(body) ? body : [body])
+            if (!rows.some((x) => x.id === row.id)) rows.push(row);
           return json(null, 201);
         }
         return json(rows);
@@ -191,4 +193,147 @@ test("primeira configuração gera QR local e só libera acesso após validar TO
   await expect(
     page.getByRole("heading", { name: "Visão do mês" }),
   ).toBeVisible();
+});
+// PDF sintético sem dados reais; usa texto posicionado para exercitar o leitor PDF.js.
+function statementPdf(lines) {
+  const text = lines
+    .map(
+      (line, i) =>
+        `${i ? "0 -20 Td\n" : ""}(${line.replace(/[\\()]/g, "\\$&")}) Tj`,
+    )
+    .join("\n");
+  const content = `BT /F1 12 Tf 50 760 Td\n${text}\nET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((obj, i) => {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${i + 1} 0 obj\n${obj}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 6\n0000000000 65535 f \n${offsets
+    .slice(1)
+    .map((x) => `${String(x).padStart(10, "0")} 00000 n \n`)
+    .join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(pdf);
+}
+async function upload(page, buffer) {
+  await page
+    .getByRole("button", { name: "Importar fatura PDF", exact: true })
+    .click();
+  const dialog = page.locator(".import-dialog");
+  await dialog
+    .getByLabel("Fatura em PDF (até 15 MB)")
+    .setInputFiles({
+      name: "fatura-ficticia.pdf",
+      mimeType: "application/pdf",
+      buffer,
+    });
+  await dialog.locator("[name=bank]").selectOption("Nubank");
+  await dialog.locator("[name=person]").selectOption("Larissa");
+  await dialog.locator("[name=month]").fill("2026-01");
+  await dialog.getByLabel("Vencimento da fatura").fill("2026-01-20");
+  await dialog.getByRole("button", { name: "Ler PDF neste aparelho" }).click();
+  return dialog;
+}
+test("PDF real é lido localmente, revisado, salvo em lote e não reimportado", async ({
+  page,
+}) => {
+  await setup(page);
+  const writes = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/rest/v1/"))
+      writes.push(r.postDataJSON());
+  });
+  await password(page);
+  await otp(page);
+  const buffer = statementPdf([
+    "Fatura ficticia",
+    "05/01 MERCADO 123,45",
+    "06/01 FARMACIA 20,00",
+    "07/01 ESTORNO -10,00",
+    "Total 143,45",
+  ]);
+  const dialog = await upload(page, buffer);
+  await expect(dialog.locator(".import-row")).toHaveCount(2);
+  await expect(dialog.locator("#import-total")).toContainText("143,45");
+  expect(writes).toHaveLength(0);
+  await dialog
+    .locator(".import-row")
+    .first()
+    .locator("[name=category]")
+    .selectOption("Alimentação");
+  await dialog
+    .getByLabel("Conferi as compras selecionadas", { exact: false })
+    .check();
+  await dialog
+    .getByRole("button", { name: "Salvar compras selecionadas" })
+    .click();
+  await expect(page.locator(".import-dialog")).toHaveCount(0);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toHaveLength(2);
+  expect(writes[0][0]).toMatchObject({
+    person: "Larissa",
+    cents: 12345,
+    date: "2026-01-20",
+    status: "pending",
+    category: "Alimentação",
+  });
+  expect(JSON.stringify(writes)).not.toContain("Fatura ficticia");
+  await expect(page.locator("#transactions")).toContainText("MERCADO");
+  const again = await upload(page, buffer);
+  await expect(
+    again.getByText("Já importada deste PDF", { exact: false }),
+  ).toHaveCount(2);
+  await expect(again.locator("[name=include]:checked")).toHaveCount(0);
+  expect(writes).toHaveLength(1);
+});
+test("PDF sem texto não vira gastos nem envia arquivo; cancelar revisão não salva", async ({
+  page,
+}) => {
+  await setup(page);
+  const writes = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/rest/v1/"))
+      writes.push(r.url());
+  });
+  await password(page);
+  await otp(page);
+  const empty = await upload(page, statementPdf([]));
+  await expect(empty.locator("#import-error")).toContainText("OCR");
+  expect(writes).toHaveLength(0);
+  await empty.getByRole("button", { name: "Fechar importação" }).click();
+  const dialog = await upload(page, statementPdf(["05/01 MERCADO 12,00"]));
+  await expect(dialog.locator(".import-row")).toHaveCount(1);
+  await dialog.getByRole("button", { name: "Fechar importação" }).click();
+  expect(writes).toHaveLength(0);
+});
+test("PDF com senha é aberto no aparelho e a senha não aparece nas requisições", async ({
+  page,
+}) => {
+  const { readFile } = await import("node:fs/promises");
+  const fixture = JSON.parse(
+    await readFile(
+      new URL("./fixtures/locked-pdf.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  await setup(page);
+  const payloads = [];
+  page.on("request", (r) => {
+    if (r.postData()) payloads.push(r.postData());
+  });
+  await password(page);
+  await otp(page);
+  page.once("dialog", (d) => d.accept("senha-ficticia-apenas-teste"));
+  const dialog = await upload(page, Buffer.from(fixture.base64, "base64"));
+  await expect(dialog.locator(".import-row")).toHaveCount(1);
+  expect(payloads.join("\n")).not.toContain("senha-ficticia-apenas-teste");
+  await dialog.getByRole("button", { name: "Fechar importação" }).click();
 });

@@ -1,5 +1,5 @@
 import { build, loadEnv } from "vite";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, readdir } from "node:fs/promises";
 const env = loadEnv("production", process.cwd(), "VITE_");
 let origin = "";
 if (
@@ -35,7 +35,7 @@ if (env.VITE_SUPABASE_URL) {
 }
 await build({ base: "./" });
 const path = "dist/index.html";
-const policy = `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src ${origin || "'none'"}; object-src 'none'; base-uri 'none'; form-action 'none'`;
+const policy = `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; worker-src 'self'; connect-src 'self' ${origin}; object-src 'none'; base-uri 'none'; form-action 'none'`;
 await writeFile(
   path,
   (await readFile(path, "utf8")).replace(
@@ -44,3 +44,15 @@ await writeFile(
   ),
 );
 await writeFile("dist/.nojekyll", "");
+
+// Distribui as licenças/avisos dos pacotes de produção junto com os artefatos.
+const lock=JSON.parse(await readFile('package-lock.json','utf8'));
+const notices=[];
+for(const [directory,metadata] of Object.entries(lock.packages)){
+  if(!directory||metadata.dev)continue;
+  let files;try{files=await readdir(directory);}catch{continue;}
+  for(const file of files.filter(x=>/^(?:licen[cs]e|notice)(?:\..*)?$/i.test(x))){
+    notices.push(`${directory} — ${metadata.version} — ${file}\n\n${await readFile(`${directory}/${file}`,'utf8')}`);
+  }
+}
+await writeFile('dist/THIRD_PARTY_NOTICES.txt',notices.join('\n\n--------------------\n\n'));
