@@ -6,7 +6,13 @@ import { join, resolve } from "node:path";
 const files = readdirSync("dist").sort();
 if (
   JSON.stringify(files) !==
-  JSON.stringify([".nojekyll", "THIRD_PARTY_NOTICES.txt", "assets", "index.html"])
+  JSON.stringify([
+    ".nojekyll",
+    "THIRD_PARTY_NOTICES.txt",
+    "assets",
+    "index.html",
+    "ocr",
+  ])
 )
   throw Error("dist contém arquivos inesperados; faça um build limpo.");
 if (
@@ -25,6 +31,18 @@ for (const f of readdirSync("dist/assets")) {
       "Não publique artefatos de teste. Execute npm run build sem as variáveis de teste.",
     );
 }
+const expectedOcr = [
+  "eng.traineddata.gz",
+  "por.traineddata.gz",
+  "tesseract-core-lstm.wasm.js",
+  "tesseract-core-relaxedsimd-lstm.wasm.js",
+  "tesseract-core-simd-lstm.wasm.js",
+  "worker.min.js",
+];
+if (
+  JSON.stringify(readdirSync("dist/ocr").sort()) !== JSON.stringify(expectedOcr)
+)
+  throw Error("Arquivos inesperados nos recursos OCR.");
 const directory = mkdtempSync(join(tmpdir(), "adois-deploy-"));
 const run = (args, env = process.env) => {
   const r = spawnSync("git", args, { encoding: "utf8", env });

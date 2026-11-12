@@ -9,7 +9,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test src/*.test.js tests/*.test.js",
     "test:e2e": "playwright test",
-    "deploy:pages": "node scripts/deploy-pages.mjs"
+    "deploy:pages": "node scripts/deploy-pages.mjs",
+    "predev": "node scripts/prepare-ocr.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.16",
@@ -18,8 +19,11 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/por": "^1.0.0",
     "pdfjs-dist": "^6.5.438",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "tesseract.js": "^7.0.0"
   },
   "engines": {
     "node": ">=22.12"

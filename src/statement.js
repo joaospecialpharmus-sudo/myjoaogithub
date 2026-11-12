@@ -1,5 +1,15 @@
 const paymentSlipPattern =
   /\b(?:uso do banco|nosso n[uú]mero|ficha de compensa[çc][aã]o|autentica[çc][aã]o mec[aâ]nica|linha digit[aá]vel|c[oó]digo de barras|ag[eê]ncia\s*\/\s*c[oó]digo)\b/iu;
+export function isStatementPayment(text) {
+  const compact = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  return /(?:inclusaodepagamento|pagamentoviaconta|pagamentorecebido|pagamentoefetuado|creditorecebido)/.test(
+    compact,
+  );
+}
 export function isPaymentSlipText(text) {
   return paymentSlipPattern.test(text);
 }
@@ -10,8 +20,20 @@ const datePattern =
 const dateStart =
   /(?:^|\s)(?:\d{1,2}[\/.-]\d{1,2}(?:[\/.-](?:\d{4}|\d{2}))?|\d{1,2}\s+(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)(?:\s+\d{4})?)(?=\s|$)/gi;
 function namedDate(line) {
+  // Marcadores de linha e datas compactas do C6, sem transformar valores monetários.
+  line = line.replace(/^[□☐◻▪■oO0]\s+(?=[O0-9]{1,3}\s*[A-Za-zÀ-ÿ0])/, "");
+  const packed = line.match(
+    /^([O0-9]{1,3})\s*(jan|fev|mar|abr|mai|jun|jul|ago|set|[oO0][oO0]?ut|nov|dez)\.?\s+(.+)$/i,
+  );
+  if (packed) {
+    let day = packed[1].replace(/O/gi, "0");
+    if (day.length === 3 && day.endsWith("0")) day = day.slice(0, 2);
+    const month = /^[oO0]/.test(packed[2]) ? "out" : packed[2];
+    if (Number(day) >= 1 && Number(day) <= 31)
+      line = `${day} ${month} ${packed[3]}`;
+  }
   const named = line.match(
-    /^(\d{1,2})\s+([A-Za-zÀ-ÿ]{3,9})(?:\s+(\d{4}))?(?:\s+(.*))?$/,
+    /^(\d{1,2})\s*([A-Za-zÀ-ÿ]{3,9})(?:\s+(\d{4}))?(?:\s+(.*))?$/,
   );
   if (!named) return line;
   const abbreviation = named[2]
@@ -77,6 +99,13 @@ export function parseStatementLines(lines, referenceMonth) {
       .replace(/\s+/g, " ")
       .trim()
       .replace(/^(?:[l•▪◆]\s+)(?=lancamentos)/, "");
+    const compactHeading = heading.replace(/[^a-z0-9]/g, "");
+    if (
+      /^(?:l?lancamentos(?:compras|produtos|destafatura)|compras(?:doperiodo|destafatura|esaques)|transacoes(?:destafatura|docartao)|encargoscobradosnestafatura)/.test(
+        compactHeading,
+      )
+    )
+      section = "current";
     if (heading.length < 180 && !/\d+,\d{2}/.test(heading)) {
       if (
         /^(?:compras parceladas\s+)?(?:proximas? faturas?|faturas? futuras?|parcelas? futuras?)\b/.test(
@@ -250,6 +279,10 @@ export function parseStatementLines(lines, referenceMonth) {
       if (
         /[−-]/.test(amount[0]) ||
         /^C$/i.test(tail) ||
+        isStatementPayment(description) ||
+        /\b(?:inclus[aã]o de pagamento|pagamento (?:via|recebido|efetuado)|cr[eé]dito recebido)\b/i.test(
+          description,
+        ) ||
         /^(?:total|subtotal|sub-total|saldo|pagamento|pagto|limite|resumo|valor a pagar|vencimento|cr[eé]dito|estorno|ajuste)\b/i.test(
           description,
         )
@@ -394,12 +427,26 @@ export function markImportDuplicates(rows, existing) {
   });
 }
 export function findGrossStatementTotal(lines) {
-  const matches = [];
+  const matches = [],
+    national = [],
+    international = [];
   for (const raw of lines) {
+    if (raw.referenceUncertain) continue;
     const text = (typeof raw === "string" ? raw : raw.text)
       .replace(/\s+/g, " ")
       .trim();
     const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const isNational = /^compras nacionais\b/i.test(normalized),
+      isInternational = /^compras internacionais\b/i.test(normalized);
+    if (isNational || isInternational) {
+      const found = [...text.matchAll(amountPattern)];
+      if (found.length === 1 && !/[−-]/.test(found[0][0])) {
+        const n = Number(found[0][0].replace(/[^\d]/g, ""));
+        if (Number.isSafeInteger(n) && n >= 0)
+          (isNational ? national : international).push(n);
+      }
+      continue;
+    }
     if (!/^total dos lancamentos atuais\b/i.test(normalized)) continue;
     const amounts = [...text.matchAll(amountPattern)];
     if (amounts.length !== 1 || /[−-]/.test(amounts[0][0])) continue;
@@ -408,5 +455,13 @@ export function findGrossStatementTotal(lines) {
       matches.push(cents);
   }
   // Só preenche quando há uma referência global inequívoca. Não usa limites nem ofertas de financiamento.
-  return matches.length === 1 ? matches[0] : null;
+  if (matches.length === 1) return matches[0];
+  if (
+    matches.length === 0 &&
+    national.length === 1 &&
+    international.length === 1 &&
+    national[0] + international[0] > 0
+  )
+    return national[0] + international[0];
+  return null;
 }

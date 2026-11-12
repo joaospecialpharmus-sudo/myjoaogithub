@@ -296,3 +296,45 @@ test("referência de compras vem apenas do total de lançamentos, nunca de limit
     null,
   );
 });
+test("C6: cabeçalho retorna da simulação e datas compactas e pagamento sem espaços não viram gastos errados", () => {
+  const p = parseStatementLines(
+    [
+      "Pagamento mínimo 20,00",
+      "Juros 10,00",
+      "T r a n s a ç õ e s d o c a r t ã o p r i n c i p a l",
+      "O 07out COMERCIO A 20,00",
+      "O O8out COMERCIO B 30,00",
+      "O 220out COMERCIO C 12,50",
+      "07 out EF InclusaodePagamento 100,00",
+    ],
+    "2026-11",
+  );
+  assert.equal(p.rows.length, 3);
+  assert.deepEqual(
+    p.rows.map((x) => x.cents),
+    [2000, 3000, 1250],
+  );
+  assert.equal(p.rows[2].purchaseDate, "2026-10-22");
+});
+test("C6: referência global soma compras nacionais e internacionais e não usa saldo de limite ou boleto", async () => {
+  const { findGrossStatementTotal } = await import("./statement.js");
+  assert.equal(
+    findGrossStatementTotal([
+      "Compras nacionais 100,00",
+      "Compras internacionais 0,00",
+      "Total a pagar 95,00",
+      "Limite utilizado 95,00",
+    ]),
+    10000,
+  );
+});
+test("total OCR ambíguo fica para confirmação manual em vez de preencher valor duvidoso", async () => {
+  const { findGrossStatementTotal } = await import("./statement.js");
+  assert.equal(
+    findGrossStatementTotal([
+      { text: "Compras nacionais 100,00", referenceUncertain: true },
+      { text: "Compras internacionais 0,00" },
+    ]),
+    null,
+  );
+});

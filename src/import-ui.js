@@ -14,7 +14,7 @@ export function openStatementImport({ getEntries, onSave }) {
   dialog.className = "import-dialog";
   const d = new Date();
   const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  dialog.innerHTML = `<div class="section-head"><h2>Importar fatura PDF</h2><button type="button" id="import-close" aria-label="Fechar importação">×</button></div><p>O PDF é lido neste aparelho. Somente os gastos que você confirmar serão enviados ao banco privado. Não são enviados o arquivo, a senha nem o texto completo.</p><form id="import-read"><label>Fatura em PDF (até 15 MB)<input name="file" type="file" accept="application/pdf,.pdf" required></label><div class="form-grid"><label>Banco / cartão<select name="bank"><option>C6 Bank</option><option>Itaú</option><option>Nubank</option><option>Caixa cartões</option></select></label><label>Responsável<select name="person"><option>Compartilhado</option><option>Eu</option><option>Larissa</option></select></label><label>Mês da fatura<input name="month" type="month" value="${month}" required></label><label>Vencimento da fatura<input name="due" type="date" required></label><label>Situação da fatura<select name="status"><option value="pending">Ainda não paga</option><option value="done">Já paga</option></select></label></div><p>As despesas entrarão no fluxo de caixa no vencimento informado. Não cadastre também o pagamento integral da fatura como outra despesa.</p><button type="submit" class="primary">Ler PDF neste aparelho</button></form><p id="import-status" role="status" aria-live="polite"></p><p id="import-error" role="alert"></p><section id="import-review"></section>`;
+  dialog.innerHTML = `<div class="section-head"><h2>Importar fatura PDF</h2><button type="button" id="import-close" aria-label="Fechar importação">×</button></div><p>O PDF é lido neste aparelho. Somente os gastos que você confirmar serão enviados ao banco privado. Não são enviados o arquivo, a senha nem o texto completo.</p><form id="import-read"><label>Fatura em PDF (até 15 MB)<input name="file" type="file" accept="application/pdf,.pdf" required></label><div class="form-grid"><label>Banco / cartão<select name="bank"><option>C6 Bank</option><option>Itaú</option><option>Nubank</option><option>Caixa cartões</option></select></label><label>Responsável<select name="person"><option>Compartilhado</option><option>Eu</option><option>Larissa</option></select></label><label>Mês da fatura<input name="month" type="month" value="${month}" required></label><label>Vencimento da fatura<input name="due" type="date" required></label><label>Situação da fatura<select name="status"><option value="pending">Ainda não paga</option><option value="done">Já paga</option></select></label></div><label class="include"><input name="force_ocr" type="checkbox"> Ler como imagem (OCR), se a leitura normal falhar</label><p>As despesas entrarão no fluxo de caixa no vencimento informado. Não cadastre também o pagamento integral da fatura como outra despesa.</p><button type="submit" class="primary">Ler PDF neste aparelho</button></form><p id="import-status" role="status" aria-live="polite"></p><p id="import-error" role="alert"></p><section id="import-review"></section>`;
   document.querySelector("#app").append(dialog);
   dialog.showModal();
   const active = () => dialog.isConnected && dialog.open && isVerified();
@@ -55,7 +55,7 @@ export function openStatementImport({ getEntries, onSave }) {
     };
     try {
       const { readStatementPdf } = await import("./pdf-reader.js");
-      const { lines, digest } = await readStatementPdf(
+      const { lines, digest, usedOcr } = await readStatementPdf(
         f.get("file"),
         (reason) =>
           prompt(
@@ -64,6 +64,13 @@ export function openStatementImport({ getEntries, onSave }) {
               : "Este PDF tem senha. Digite-a para abrir somente neste aparelho.",
           ),
         () => active() && generation === version,
+        (text) => {
+          if (active() && generation === version) status.textContent = text;
+        },
+        {
+          referenceMonth: f.get("month"),
+          forceOcr: f.get("force_ocr") === "on",
+        },
       );
       if (!active() || version !== generation) return;
       const parsed = parseStatementLines(lines, f.get("month"));
@@ -93,13 +100,20 @@ export function openStatementImport({ getEntries, onSave }) {
       );
       rows = markImportDuplicates(rows, getEntries());
       if (!active() || version !== generation) return;
-      status.textContent = `${rows.length} compras candidatas. ${parsed.ignored} linhas precisam de revisão e estão disponíveis abaixo. A leitura pode ser parcial: confira com o PDF. Compras em dias diferentes ou com valores diferentes são preservadas; não há agrupamento por semelhança.`;
+      status.textContent = `${usedOcr ? "Leitura por OCR concluída. Confira datas e valores. " : ""}${rows.length} compras candidatas. ${parsed.ignored} linhas precisam de revisão e estão disponíveis abaixo. A leitura pode ser parcial: confira com o PDF. Compras em dias diferentes ou com valores diferentes são preservadas; não há agrupamento por semelhança.`;
       review.innerHTML = `<h3>Revise antes de salvar</h3><p>Banco: ${esc(context.bank)} · Responsável: ${esc(context.person)} · Vencimento: ${esc(context.due.split("-").reverse().join("/"))}. Os totais se referem somente às compras selecionadas.</p><form id="import-confirm"><div class="import-rows"></div><button type="button" id="add-missing">+ Adicionar compra que faltou</button><p id="import-total"></p><section class="invoice-check"><label>Total de lançamentos/compras no PDF (R$)<input name="official_total" type="number" min="0.01" max="1000000000" step="0.01" required placeholder="Total dos lançamentos atuais"></label><p id="invoice-reconciliation" role="status" aria-live="polite"></p><label>Valor a pagar no boleto (R$) — opcional<input name="payable_total" type="number" min="0" max="1000000000" step="0.01" placeholder="Referência separada das compras"></label><p id="payable-reference"></p><p>A conferência soma as novas compras às já salvas para o mesmo banco, responsável e vencimento. Compare as compras com “Total dos lançamentos atuais” ou “Lançamentos no cartão” do PDF. O valor a pagar do boleto pode ser diferente devido a pagamentos, saldos anteriores ou créditos. Não remova compras reais para forçar a soma. Pagamentos e créditos ainda não são conciliados automaticamente.</p><details id="existing-invoice"><summary>Compras já salvas neste vencimento</summary><div></div></details></section><label class="include"><input type="checkbox" name="reviewed" required> Conferi as compras selecionadas, os valores e o vencimento com a fatura.</label><button type="submit" class="primary">Salvar compras selecionadas</button></form>${parsed.rejected.length ? `<details class="ignored-lines"><summary>Ver ${parsed.rejected.length} linhas não importadas automaticamente</summary><p>Pagamentos, totais e estornos não devem ser incluídos como compras. As linhas abaixo ficam somente neste aparelho até você decidir incluir uma compra.</p>${parsed.rejected.map((r, i) => `<article class="ignored-line"><strong>${esc(r.reason)}</strong><p>${esc(r.line)}</p>${r.recoverable === false ? "<p>Não é um gasto. Esta linha não pode ser importada como compra.</p>" : `<button type="button" data-recover="${i}">Revisar e incluir como compra</button>`}</article>`).join("")}</details>` : ""}`;
       const detectedTotal = findGrossStatementTotal(lines);
       if (detectedTotal !== null)
         review.querySelector("[name=official_total]").value = (
           detectedTotal / 100
         ).toFixed(2);
+      if (usedOcr && detectedTotal === null)
+        review
+          .querySelector("[name=official_total]")
+          .parentElement.insertAdjacentHTML(
+            "afterend",
+            '<p class="reference-quality">O OCR não confirmou o total de referência com segurança. Informe o total das compras que consta no PDF; os valores das compras não serão alterados para forçar coincidência.</p>',
+          );
       const rowContainer = review.querySelector(".import-rows");
       function appendRow(r, i, checked = !r.exact && !r.possible) {
         rowContainer.insertAdjacentHTML(

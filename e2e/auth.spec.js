@@ -673,3 +673,94 @@ test("PDF em duas colunas recupera compras sem importar limite e separa compras 
   expect(writes[0].reduce((n, x) => n + x.cents, 0)).toBe(19500);
   expect(writes[0].every((x) => x.type === "expense")).toBe(true);
 });
+function imageOnlyPdf(jpeg, width, height) {
+  const content = `q 600 0 0 ${(600 * height) / width} 0 0 cm /Im0 Do Q`;
+  const objects = [
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
+    Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+    Buffer.from(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 ${(600 * height) / width}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`,
+    ),
+    Buffer.concat([
+      Buffer.from(
+        `<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`,
+      ),
+      jpeg,
+      Buffer.from("\nendstream"),
+    ]),
+    Buffer.from(
+      `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    ),
+  ];
+  const chunks = [Buffer.from("%PDF-1.4\n")],
+    offsets = [0];
+  let size = chunks[0].length;
+  objects.forEach((obj, i) => {
+    offsets.push(size);
+    const part = Buffer.concat([
+      Buffer.from(`${i + 1} 0 obj\n`),
+      obj,
+      Buffer.from("\nendobj\n"),
+    ]);
+    chunks.push(part);
+    size += part.length;
+  });
+  chunks.push(
+    Buffer.from(
+      `xref\n0 6\n0000000000 65535 f \n${offsets
+        .slice(1)
+        .map((x) => `${String(x).padStart(10, "0")} 00000 n \n`)
+        .join(
+          "",
+        )}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${size}\n%%EOF`,
+    ),
+  );
+  return Buffer.concat(chunks);
+}
+test("imagem sem texto recebe OCR local, exclui pagamento e confere compras C6", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await setup(page);
+  await password(page);
+  await otp(page);
+  const requests = [];
+  page.context().on("request", (r) => requests.push(r.url()));
+  const data = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1800;
+    canvas.height = 660;
+    const c = canvas.getContext("2d");
+    c.fillStyle = "white";
+    c.fillRect(0, 0, 1800, 660);
+    c.fillStyle = "black";
+    c.font = "32px Arial";
+    [
+      "Transações do cartão principal",
+      "07 out COMERCIO A 20,00",
+      "08 out COMERCIO B 30,00",
+      "09 out COMERCIO C 22,50",
+      "09 out Inclusao de Pagamento 100,00",
+      "Compras nacionais 72,50",
+      "Compras internacionais 0,00",
+    ].forEach((t, i) => c.fillText(t, 70, 65 + i * 75));
+    return canvas.toDataURL("image/jpeg", 0.98).split(",")[1];
+  });
+  const dialog = await upload(
+    page,
+    imageOnlyPdf(Buffer.from(data, "base64"), 1800, 660),
+  );
+  await expect(dialog.locator(".import-row")).toHaveCount(3, {
+    timeout: 80000,
+  });
+  await expect(dialog.locator("#import-status")).toContainText("OCR concluída");
+  await expect(dialog.locator("#import-total")).toContainText("72,50");
+  await expect(dialog.locator("[name=official_total]")).toHaveValue("72.50");
+  expect(
+    requests.every(
+      (url) =>
+        url.startsWith("http://127.0.0.1:4175/") ||
+        url.startsWith("https://test-project.supabase.co/"),
+    ),
+  ).toBe(true);
+});

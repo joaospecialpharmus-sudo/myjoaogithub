@@ -1,11 +1,13 @@
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { textItemsToLines } from "./statement.js";
+import { textItemsToLines, parseStatementLines } from "./statement.js";
 GlobalWorkerOptions.workerSrc = workerUrl;
 export async function readStatementPdf(
   file,
   onPassword,
   isActive = () => true,
+  onProgress = () => {},
+  options = {},
 ) {
   if (!file || file.size === 0 || file.size > 15 * 1024 * 1024)
     throw Error("Escolha um PDF de até 15 MB.");
@@ -24,7 +26,7 @@ export async function readStatementPdf(
     useSystemFonts: false,
     disableFontFace: true,
     stopAtErrors: true,
-    maxImageSize: 1,
+    maxImageSize: 20000000,
     enableXfa: false,
   });
   let cancelled = false;
@@ -40,10 +42,42 @@ export async function readStatementPdf(
       task.destroy();
     } else update(password);
   };
+  let ocr = null;
+  let ocrPage = 0;
+  const recognize = async (page, number) => {
+    ocrPage = number;
+    const work = (async () => {
+      if (!ocr) {
+        const { createLocalOcr } = await import("./local-ocr.js");
+        ocr = await createLocalOcr(
+          (percent) =>
+            onProgress(`Lendo imagem da página ${ocrPage}: ${percent}%`),
+          isActive,
+        );
+      }
+      if (cancelled || !isActive()) {
+        await ocr.terminate();
+        throw Error("Leitura cancelada.");
+      }
+      onProgress(`Lendo imagem da página ${number} com OCR no aparelho…`);
+      return ocr.read(page, number);
+    })();
+    let monitor;
+    const abort = new Promise((_, reject) => {
+      monitor = setInterval(() => {
+        if (cancelled || !isActive()) reject(Error("Leitura cancelada."));
+      }, 400);
+    });
+    try {
+      return await Promise.race([work, abort]);
+    } finally {
+      clearInterval(monitor);
+    }
+  };
   const timeout = setTimeout(() => {
     cancelled = true;
     task.destroy();
-  }, 45000);
+  }, 240000);
   try {
     const pdf = await task.promise;
     if (pdf.numPages > 60)
@@ -56,7 +90,17 @@ export async function readStatementPdf(
     for (let i = 1; i <= pdf.numPages; i++) {
       if (!isActive()) throw Error("Leitura cancelada.");
       const page = await pdf.getPage(i);
+      onProgress(`Lendo página ${i} de ${pdf.numPages}…`);
       const text = await page.getTextContent();
+      if (options.forceOcr || !text.items.some((x) => x.str?.trim())) {
+        if (pdf.numPages > 20)
+          throw Error(
+            "O PDF excede o limite de 20 páginas para OCR no aparelho.",
+          );
+        lines.push(...(await recognize(page, i)));
+        page.cleanup();
+        continue;
+      }
       const result = textItemsToLines(text.items, {
         boundary: (page.view[0] + page.view[2]) / 2,
         offset: sourceOffset,
@@ -70,11 +114,36 @@ export async function readStatementPdf(
       lines.push(...next);
       page.cleanup();
     }
+    if (
+      !ocr &&
+      lines.length &&
+      parseStatementLines(
+        lines,
+        options.referenceMonth || new Date().toISOString().slice(0, 7),
+      ).rows.length === 0
+    ) {
+      if (pdf.numPages > 20)
+        throw Error(
+          "O PDF excede o limite de 20 páginas para OCR no aparelho.",
+        );
+      const fallback = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        if (!isActive()) throw Error("Leitura cancelada.");
+        const page = await pdf.getPage(i);
+        fallback.push(...(await recognize(page, i)));
+        page.cleanup();
+      }
+      const reference =
+        options.referenceMonth || new Date().toISOString().slice(0, 7);
+      if (parseStatementLines(fallback, reference).rows.length > 0) {
+        lines.splice(0, lines.length, ...fallback);
+      }
+    }
     if (!lines.some((x) => x.text.trim()))
       throw Error(
-        "Este PDF não contém texto extraível. PDFs digitalizados precisam de OCR, ainda não disponível.",
+        "O OCR não encontrou texto legível neste PDF. Confira a qualidade do arquivo.",
       );
-    return { lines, digest };
+    return { lines, digest, usedOcr: Boolean(ocr) };
   } catch (error) {
     if (cancelled) throw Error("Leitura cancelada ou tempo limite atingido.");
     if (error.name === "PasswordException")
@@ -83,6 +152,7 @@ export async function readStatementPdf(
       throw Error("PDF inválido ou danificado. Exporte novamente pelo banco.");
     if (
       error.message?.startsWith("O PDF") ||
+      error.message?.startsWith("O OCR") ||
       error.message?.startsWith("Este PDF") ||
       error.message === "Leitura cancelada."
     )
@@ -92,6 +162,7 @@ export async function readStatementPdf(
     );
   } finally {
     clearTimeout(timeout);
+    if (ocr) await ocr.terminate();
     await task.destroy();
   }
 }
