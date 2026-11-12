@@ -228,13 +228,11 @@ async function upload(page, buffer) {
     .getByRole("button", { name: "Importar fatura PDF", exact: true })
     .click();
   const dialog = page.locator(".import-dialog");
-  await dialog
-    .getByLabel("Fatura em PDF (até 15 MB)")
-    .setInputFiles({
-      name: "fatura-ficticia.pdf",
-      mimeType: "application/pdf",
-      buffer,
-    });
+  await dialog.getByLabel("Fatura em PDF (até 15 MB)").setInputFiles({
+    name: "fatura-ficticia.pdf",
+    mimeType: "application/pdf",
+    buffer,
+  });
   await dialog.locator("[name=bank]").selectOption("Nubank");
   await dialog.locator("[name=person]").selectOption("Larissa");
   await dialog.locator("[name=month]").fill("2026-01");
@@ -336,4 +334,75 @@ test("PDF com senha é aberto no aparelho e a senha não aparece nas requisiçõ
   await expect(dialog.locator(".import-row")).toHaveCount(1);
   expect(payloads.join("\n")).not.toContain("senha-ficticia-apenas-teste");
   await dialog.getByRole("button", { name: "Fechar importação" }).click();
+});
+test("corridas parecidas são preservadas, linha ignorada pode ser corrigida e aba Cartões resume todas", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  const writes = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/rest/v1/entries"))
+      writes.push(r.postDataJSON());
+  });
+  await password(page);
+  await otp(page);
+  const dialog = await upload(
+    page,
+    statementPdf([
+      "05/01 DL*Uber 11,95",
+      "06/01 DL*Uber 11,95",
+      "06/01 DL*Uber 11,96",
+      "07/01 LOJA 5,00 8,00",
+    ]),
+  );
+  await expect(dialog.locator(".import-row")).toHaveCount(3);
+  await expect(dialog.locator("[name=include]:checked")).toHaveCount(3);
+  await dialog.getByText("Ver 1 linhas não importadas automaticamente").click();
+  await expect(dialog.locator(".ignored-line")).toContainText(
+    "Mais de um valor",
+  );
+  await dialog
+    .getByRole("button", { name: "Revisar e incluir como compra" })
+    .click();
+  const manual = dialog.locator(".import-row").last();
+  await manual.getByLabel("Descrição", { exact: true }).fill("LOJA CORRIGIDA");
+  await manual.getByLabel("Valor (R$)", { exact: true }).fill("8");
+  await expect(dialog.locator("#import-total")).toContainText("43,86");
+  expect(writes).toHaveLength(0);
+  await dialog
+    .getByLabel("Conferi as compras selecionadas", { exact: false })
+    .check();
+  await dialog
+    .getByRole("button", { name: "Salvar compras selecionadas" })
+    .click();
+  await expect(page.locator(".import-dialog")).toHaveCount(0);
+  expect(writes[0]).toHaveLength(4);
+  await page
+    .locator(".mobile-nav")
+    .getByRole("button", { name: "Cartões", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Resumo dos cartões" }),
+  ).toBeVisible();
+  await expect(page.locator(".cards article").first()).toContainText("43,86");
+  await expect(page.locator(".cards article").nth(1).locator("h2")).toHaveText(
+    "4",
+  );
+  await page.getByText("Ver compras deste cartão", { exact: true }).click();
+  await expect(page.locator(".card-summary tbody tr")).toHaveCount(4);
+  await expect(page.locator(".summary-note")).toContainText("resumo parcial");
+  await page.locator("#card-bank").selectOption("Itaú");
+  await expect(
+    page.getByText("Nenhuma compra de cartão neste filtro"),
+  ).toBeVisible();
+  await page.locator("#card-bank").selectOption("Nubank");
+  await page.locator("#card-person").selectOption("Eu");
+  await expect(
+    page.getByText("Nenhuma compra de cartão neste filtro"),
+  ).toBeVisible();
+  await page.locator("#card-person").selectOption("Larissa");
+  await expect(page.locator(".cards article").nth(1).locator("h2")).toHaveText(
+    "4",
+  );
 });

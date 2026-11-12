@@ -3,6 +3,7 @@ import {
   parseStatementLines,
   importId,
   importedName,
+  markImportDuplicates,
   sameEntry,
 } from "./statement.js";
 import { toCents } from "./finance.js";
@@ -29,16 +30,20 @@ export function openStatementImport({ getEntries, onSave }) {
   const status = dialog.querySelector("#import-status"),
     error = dialog.querySelector("#import-error"),
     review = dialog.querySelector("#import-review");
-  dialog.querySelector("#import-read").onsubmit = async (e) => {
+  const form = dialog.querySelector("#import-read");
+  form.oninput = () => {
+    generation++;
+    review.replaceChildren();
+    status.textContent = "Configuração alterada. Clique em Ler PDF novamente.";
+  };
+  form.onsubmit = async (e) => {
     e.preventDefault();
     const version = ++generation;
     review.replaceChildren();
     error.textContent = "";
     status.textContent = "Lendo PDF…";
-    const button = e.target.querySelector("[type=submit]");
-    button.disabled = true;
-    const f = new FormData(e.target);
-    const controls = [...e.target.querySelectorAll("input,select,button")];
+    const f = new FormData(form);
+    const controls = [...form.querySelectorAll("input,select,button")];
     controls.forEach((x) => (x.disabled = true));
     const context = {
       bank: f.get("bank"),
@@ -60,56 +65,65 @@ export function openStatementImport({ getEntries, onSave }) {
       );
       if (!active() || version !== generation) return;
       const parsed = parseStatementLines(lines, f.get("month"));
-      if (!parsed.rows.length)
+      if (parsed.rows.length > 500 || parsed.rejected.length > 500)
         throw Error(
-          "Nenhuma compra foi identificada com segurança. Este layout pode não ser compatível. Nenhum dado foi salvo.",
+          "Mais de 500 linhas de compra ou revisão. Exporte um PDF menor. Nenhum dado foi salvo.",
         );
-      if (parsed.rows.length > 500)
-        throw Error(
-          "Foram encontradas mais de 500 compras. Exporte um PDF menor. Nenhum dado foi salvo.",
-        );
-      const rows = await Promise.all(
-        parsed.rows.map(async (row) => {
-          const id = await importId(digest, row.index);
-          const entry = {
-            id,
-            name: importedName(context.bank, row.purchaseDate, row.description),
-            cents: row.cents,
-            date: context.due,
-            person: context.person,
-            type: "expense",
-            status: context.status,
-            category: "Outros",
-          };
-          const exact = getEntries().some((x) => x.id === id);
-          const possible = getEntries().some((x) => sameEntry(x, entry));
-          return { ...row, entry, exact, possible };
-        }),
+      const buildEntry = async (row) => ({
+        id: await importId(digest, row.index),
+        name: importedName(
+          context.bank,
+          row.purchaseDate || context.due,
+          row.description,
+        ),
+        cents: row.cents,
+        date: context.due,
+        person: context.person,
+        type: "expense",
+        status: context.status,
+        category: "Outros",
+      });
+      let rows = await Promise.all(
+        parsed.rows.map(async (row) => ({
+          ...row,
+          entry: await buildEntry(row),
+        })),
       );
+      rows = markImportDuplicates(rows, getEntries());
       if (!active() || version !== generation) return;
-      status.textContent = `${rows.length} compras candidatas. ${parsed.ignored} linhas com data foram ignoradas por ambiguidade, crédito, pagamento ou formato incompatível. A leitura é inicial e pode deixar compras de fora: confira com o PDF e o total da fatura.`;
-      review.innerHTML = `<h3>Revise antes de salvar</h3><p>Banco: ${esc(context.bank)} · Responsável: ${esc(context.person)} · Vencimento: ${esc(context.due.split("-").reverse().join("/"))}. Alterar os campos acima exige ler o PDF novamente.</p><form id="import-confirm"><div class="import-rows">${rows.map((r, i) => `<fieldset class="import-row" data-row="${i}"><label class="include"><input type="checkbox" name="include" ${r.exact || r.possible ? "" : "checked"} ${r.exact ? "disabled" : ""}> Importar esta compra</label><p>Compra em ${esc(r.purchaseDate.split("-").reverse().join("/"))}${r.exact ? " · Já importada deste PDF" : r.possible ? " · Possível duplicata: confira antes de marcar" : ""}</p><div class="form-grid"><label>Descrição<input name="description" value="${esc(r.description)}" maxlength="65" required></label><label>Valor (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" value="${(r.cents / 100).toFixed(2)}" required></label><label>Categoria<select name="category">${["Outros", "Alimentação", "Transporte", "Saúde", "Moradia", "Lazer", "Faculdade", "Acordo"].map((c) => `<option>${c}</option>`).join("")}</select></label></div></fieldset>`).join("")}</div><p id="import-total"></p><label class="include"><input type="checkbox" name="reviewed" required> Conferi as compras selecionadas, os valores e o vencimento com a fatura.</label><button type="submit" class="primary">Salvar compras selecionadas</button></form>`;
+      status.textContent = `${rows.length} compras candidatas. ${parsed.ignored} linhas precisam de revisão e estão disponíveis abaixo. A leitura pode ser parcial: confira com o PDF. Compras em dias diferentes ou com valores diferentes são preservadas; não há agrupamento por semelhança.`;
+      review.innerHTML = `<h3>Revise antes de salvar</h3><p>Banco: ${esc(context.bank)} · Responsável: ${esc(context.person)} · Vencimento: ${esc(context.due.split("-").reverse().join("/"))}. Os totais se referem somente às compras selecionadas.</p><form id="import-confirm"><div class="import-rows"></div><button type="button" id="add-missing">+ Adicionar compra que faltou</button><p id="import-total"></p><label class="include"><input type="checkbox" name="reviewed" required> Conferi as compras selecionadas, os valores e o vencimento com a fatura.</label><button type="submit" class="primary">Salvar compras selecionadas</button></form>${parsed.rejected.length ? `<details class="ignored-lines"><summary>Ver ${parsed.rejected.length} linhas não importadas automaticamente</summary><p>Pagamentos, totais e estornos não devem ser incluídos como compras. As linhas abaixo ficam somente neste aparelho até você decidir incluir uma compra.</p>${parsed.rejected.map((r, i) => `<article class="ignored-line"><strong>${esc(r.reason)}</strong><p>${esc(r.line)}</p><button type="button" data-recover="${i}">Revisar e incluir como compra</button></article>`).join("")}</details>` : ""}`;
+      const rowContainer = review.querySelector(".import-rows");
+      function appendRow(r, i, checked = !r.exact && !r.possible) {
+        rowContainer.insertAdjacentHTML(
+          "beforeend",
+          `<fieldset class="import-row" data-row="${i}"><label class="include"><input type="checkbox" name="include" ${checked ? "checked" : ""} ${r.exact ? "disabled" : ""}> Importar esta compra</label><p>${r.exact ? "Já importada deste PDF" : r.possible ? "Possível duplicata exata: mesma data, descrição, valor e responsável. Confira antes de marcar." : r.manual ? "Inclusão manual: confira os campos com a fatura." : "Compra identificada para revisão."}</p><div class="form-grid"><label>Data da compra<input name="purchase_date" type="date" min="1900-01-01" max="2100-12-31" value="${esc(r.purchaseDate)}" required></label><label>Descrição<input name="description" value="${esc(r.description.slice(0, 65))}" maxlength="65" required></label><label>Valor (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" value="${r.cents ? (r.cents / 100).toFixed(2) : ""}" required></label><label>Categoria<select name="category">${["Outros", "Alimentação", "Transporte", "Saúde", "Moradia", "Lazer", "Faculdade", "Acordo"].map((c) => `<option>${c}</option>`).join("")}</select></label></div></fieldset>`,
+        );
+      }
+      rows.forEach((r, i) => appendRow(r, i));
       function selection() {
-        return [...review.querySelectorAll("[data-row]")]
+        return [...rowContainer.querySelectorAll("[data-row]")]
           .filter((el) => el.querySelector("[name=include]").checked)
           .map((el) => {
             const r = rows[Number(el.dataset.row)];
-            if (!el.querySelector("[name=description]").value.trim())
-              throw Error("Preencha a descrição das compras selecionadas.");
+            const description = el
+              .querySelector("[name=description]")
+              .value.trim();
+            const date = el.querySelector("[name=purchase_date]").value;
+            if (!description || !date)
+              throw Error(
+                "Preencha a data e a descrição das compras selecionadas.",
+              );
             return {
               ...r.entry,
-              name: importedName(
-                context.bank,
-                r.purchaseDate,
-                el.querySelector("[name=description]").value,
-              ),
+              name: importedName(context.bank, date, description),
               cents: toCents(el.querySelector("[name=amount]").value),
               category: el.querySelector("[name=category]").value,
             };
           });
       }
       const total = () => {
-        for (const el of review.querySelectorAll("[data-row]")) {
+        for (const el of rowContainer.querySelectorAll("[data-row]")) {
           const included = el.querySelector("[name=include]").checked;
           el.querySelectorAll("input:not([name=include]),select").forEach(
             (x) => (x.disabled = !included),
@@ -121,11 +135,47 @@ export function openStatementImport({ getEntries, onSave }) {
             `${selected.length} selecionadas · Total: ${(selected.reduce((sum, x) => sum + x.cents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`;
         } catch {
           review.querySelector("#import-total").textContent =
-            "Confira os valores digitados.";
+            "Confira os campos das compras selecionadas.";
         }
       };
       review.querySelector("#import-confirm").addEventListener("input", total);
       total();
+      async function addManual(raw, button) {
+        if (button) button.disabled = true;
+        const r = {
+          index: raw?.index ?? `manual:${crypto.randomUUID()}`,
+          purchaseDate: raw?.purchaseDate || "",
+          description: raw?.description || "",
+          cents: 0,
+          manual: true,
+        };
+        r.entry = await buildEntry(r);
+        r.exact = getEntries().some((x) => x.id === r.entry.id);
+        if (!active() || version !== generation) return;
+        rows.push(r);
+        appendRow(r, rows.length - 1, !r.exact);
+        total();
+        rowContainer.lastElementChild.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }
+      review.querySelectorAll("[data-recover]").forEach(
+        (b) =>
+          (b.onclick = () =>
+            addManual(parsed.rejected[Number(b.dataset.recover)], b).catch(
+              () => {
+                if (active())
+                  error.textContent =
+                    "Não foi possível preparar a linha para revisão.";
+              },
+            )),
+      );
+      review.querySelector("#add-missing").onclick = () =>
+        addManual(null).catch(() => {
+          if (active())
+            error.textContent = "Não foi possível adicionar a linha.";
+        });
       review.querySelector("#import-confirm").onsubmit = async (event) => {
         event.preventDefault();
         error.textContent = "";
@@ -137,8 +187,16 @@ export function openStatementImport({ getEntries, onSave }) {
           const entries = selection();
           if (!entries.length)
             throw Error("Selecione pelo menos uma compra nova.");
-          if (entries.some((x) => !x.name.trim()))
-            throw Error("Confira as descrições.");
+          const matches = entries.filter((x) =>
+            getEntries().some((old) => sameEntry(old, x)),
+          );
+          if (
+            matches.length &&
+            !confirm(
+              `${matches.length} compra(s) têm correspondência EXATA com registros existentes (data, valor, descrição e responsável). São compras distintas que você quer manter?`,
+            )
+          )
+            return;
           await onSave(entries);
           if (active()) close();
         } catch (err) {
@@ -146,13 +204,6 @@ export function openStatementImport({ getEntries, onSave }) {
         } finally {
           save.disabled = false;
         }
-      };
-      // A alteração do contexto invalida a revisão; nunca salva com dados antigos ocultos.
-      e.target.oninput = () => {
-        generation++;
-        review.replaceChildren();
-        status.textContent =
-          "Configuração alterada. Clique em Ler PDF novamente.";
       };
     } catch (err) {
       if (active()) {
