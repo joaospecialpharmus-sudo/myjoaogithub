@@ -52,18 +52,25 @@ export async function readStatementPdf(
       );
     const lines = [];
     let length = 0;
+    let sourceOffset = 0;
     for (let i = 1; i <= pdf.numPages; i++) {
       if (!isActive()) throw Error("Leitura cancelada.");
       const page = await pdf.getPage(i);
       const text = await page.getTextContent();
-      const next = textItemsToLines(text.items);
-      length += next.join("").length;
+      const result = textItemsToLines(text.items, {
+        boundary: (page.view[0] + page.view[2]) / 2,
+        offset: sourceOffset,
+        page: i,
+      });
+      sourceOffset += result.sourceLineCount;
+      const next = result.rows;
+      length += next.map((x) => x.text).join("").length;
       if (length > 1000000)
         throw Error("O PDF excede o limite de texto para leitura no aparelho.");
       lines.push(...next);
       page.cleanup();
     }
-    if (!lines.some((x) => x.trim()))
+    if (!lines.some((x) => x.text.trim()))
       throw Error(
         "Este PDF não contém texto extraível. PDFs digitalizados precisam de OCR, ainda não disponível.",
       );

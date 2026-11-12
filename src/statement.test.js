@@ -143,3 +143,156 @@ test("Uber em dias distintos e centavos diferentes permanece como compras distin
   assert.equal(reserved[0].possible, false);
   assert.equal(reserved[1].exact, true);
 });
+test("exclui seção explícita de compras parceladas futuras e volta à seção atual sem mudar IDs", () => {
+  const p = parseStatementLines(
+    [
+      "Lancamentos: compras e saques",
+      "05/01 MERCADO 100,00",
+      "06/01 LOJA 50,00",
+      "Compras parceladas - próximas faturas",
+      "06/01 LOJA 75,00",
+      "Lançamentos: produtos e serviços",
+      "07/01 TARIFA 2,00",
+    ],
+    "2026-01",
+  );
+  assert.deepEqual(
+    p.rows.map((x) => x.cents),
+    [10000, 5000, 200],
+  );
+  assert.deepEqual(
+    p.rows.map((x) => x.index),
+    [1, 2, 6],
+  );
+  assert.equal(p.rejected.length, 1);
+  assert.match(p.rejected[0].reason, /próxima fatura/);
+  assert.equal(p.rejected[0].index, 4);
+});
+test("campos do boleto não viram compras mesmo começando por data e terminando em valor", () => {
+  const p = parseStatementLines(
+    [
+      "20/02/2026 REFERENCIA-FICTICIA 10/02/2026 Uso do Banco Carteira 225,00",
+      "05/02 MERCADO 100,00",
+      "06/02 LOJA 50,00",
+    ],
+    "2026-02",
+  );
+  assert.equal(p.rows.length, 2);
+  assert.equal(
+    p.rows.reduce((n, x) => n + x.cents, 0),
+    15000,
+  );
+  assert.equal(p.rejected.length, 1);
+  assert.equal(p.rejected[0].recoverable, false);
+  assert.equal(p.rejected[0].line, "Dados do boleto omitidos da revisão.");
+  assert.match(p.rejected[0].reason, /boleto/);
+  assert.equal(p.rows[0].index, 1);
+});
+test("encargos monetários sem data aparecem para confirmação manual; percentuais não viram despesas", () => {
+  const p = parseStatementLines(
+    [
+      "Juros de mora 2,50",
+      "IOF 0,35",
+      "Juros de mora 1,00% ao mes",
+      "20/02 Valor a pagar 150,00",
+    ],
+    "2026-02",
+  );
+  assert.equal(p.rows.length, 0);
+  assert.equal(p.rejected.length, 3);
+  assert.equal(p.rejected[0].suggestedCents, 250);
+  assert.equal(p.rejected[0].purchaseDate, "");
+  assert.equal(p.rejected[1].suggestedCents, 35);
+});
+test("taxas propostas ao pagar o mínimo não são oferecidas como encargos reais", () => {
+  const p = parseStatementLines(
+    [
+      "Pagamento minimo: R$ 30,00",
+      "Valor total financiado R$ 270,00",
+      "Encargos R$ 12,00",
+      "IOF R$ 0,80",
+      "Total a pagar R$ 282,80",
+      "Lancamentos: compras e saques",
+      "05/01 MERCADO 300,00",
+      "Encargos desta fatura",
+      "Juros de mora 2,50",
+    ],
+    "2026-01",
+  );
+  assert.equal(p.rows.length, 1);
+  assert.equal(p.rows[0].cents, 30000);
+  assert.equal(p.rejected.filter((x) => x.recoverable === false).length, 2);
+  assert.equal(p.rejected.filter((x) => x.suggestedCents).length, 1);
+  assert.equal(p.rejected.at(-1).suggestedCents, 250);
+});
+
+test("colunas independentes recuperam compras sem misturar valores de resumos e preservam índices antigos", () => {
+  const item = (str, x, y) => ({ str, transform: [1, 0, 0, 1, x, y] });
+  const items = [
+    item("05/01 MERCADO", 20, 100),
+    item("100,00", 250, 100),
+    item("Limite total 800,00", 330, 100),
+    item("06/01 LOJA", 20, 90),
+    item("50,00", 250, 90),
+    item("07/01 UBER", 330, 90),
+    item("10,00", 550, 90),
+    item("08/01 UBER", 330, 80),
+    item("5,00", 550, 80),
+    item("09/01 LOJA", 20, 70),
+    item("30,00", 250, 70),
+  ];
+  const { rows, sourceLineCount } = textItemsToLines(items, {
+    boundary: 300,
+    page: 1,
+    offset: 0,
+  });
+  const parsed = parseStatementLines(rows, "2026-01");
+  assert.equal(sourceLineCount, 4);
+  assert.equal(parsed.rows.length, 5);
+  assert.equal(
+    parsed.rows.reduce((n, x) => n + x.cents, 0),
+    19500,
+  );
+  assert.deepEqual(
+    parsed.rows.map((x) => x.index),
+    [0, 1, 3, "1:1", 2],
+  );
+});
+test("tabela de largura inteira mantém descrição e valor juntos", () => {
+  const item = (str, x, y) => ({ str, transform: [1, 0, 0, 1, x, y] });
+  const input = [
+    item("05/01 MERCADO", 20, 100),
+    item("100,00", 500, 100),
+    item("06/01 LOJA", 20, 90),
+    item("50,00", 500, 90),
+  ];
+  const p = parseStatementLines(
+    textItemsToLines(input, { boundary: 300, page: 1, offset: 10 }).rows,
+    "2026-01",
+  );
+  assert.equal(p.rows.length, 2);
+  assert.deepEqual(
+    p.rows.map((x) => x.index),
+    [10, 11],
+  );
+});
+test("referência de compras vem apenas do total de lançamentos, nunca de limites, boleto ou simulação", async () => {
+  const { findGrossStatementTotal } = await import("./statement.js");
+  assert.equal(
+    findGrossStatementTotal([
+      "Limite utilizado 180,00",
+      "Valor a pagar 180,00",
+      "Total a pagar 282,80",
+      "Total dos lançamentos atuais R$ 195,00",
+    ]),
+    19500,
+  );
+  assert.equal(findGrossStatementTotal(["Total a pagar 282,80"]), null);
+  assert.equal(
+    findGrossStatementTotal([
+      "Total dos lançamentos atuais 195,00",
+      "Total dos lançamentos atuais 200,00",
+    ]),
+    null,
+  );
+});

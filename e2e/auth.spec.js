@@ -26,9 +26,12 @@ function session(aal) {
     },
   };
 }
-async function setup(page, { member = true, badCode = false } = {}) {
+async function setup(
+  page,
+  { member = true, badCode = false, initialEntries = [] } = {},
+) {
   const requests = [];
-  const entries = [];
+  const entries = initialEntries.map((x) => ({ ...x }));
   const debts = [];
   const offers = [];
   await page.route("https://test-project.supabase.co/**", async (route) => {
@@ -196,13 +199,15 @@ test("primeira configuração gera QR local e só libera acesso após validar TO
 });
 // PDF sintético sem dados reais; usa texto posicionado para exercitar o leitor PDF.js.
 function statementPdf(lines) {
-  const text = lines
-    .map(
-      (line, i) =>
-        `${i ? "0 -20 Td\n" : ""}(${line.replace(/[\\()]/g, "\\$&")}) Tj`,
-    )
-    .join("\n");
-  const content = `BT /F1 12 Tf 50 760 Td\n${text}\nET`;
+  const escape = (text) => text.replace(/[\\()]/g, "\\$&");
+  const content = lines.some((x) => typeof x !== "string")
+    ? lines
+        .map(
+          (x) =>
+            `BT /F1 12 Tf 1 0 0 1 ${x.x} ${x.y} Tm (${escape(x.text)}) Tj ET`,
+        )
+        .join("\n")
+    : `BT /F1 12 Tf 50 760 Td\n${lines.map((line, i) => `${i ? "0 -20 Td\n" : ""}(${escape(line)}) Tj`).join("\n")}\nET`;
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -255,7 +260,7 @@ test("PDF real é lido localmente, revisado, salvo em lote e não reimportado", 
     "Fatura ficticia",
     "05/01 MERCADO 123,45",
     "06/01 FARMACIA 20,00",
-    "07/01 ESTORNO -10,00",
+    "07/01 Pagamento fatura anterior -10,00",
     "Total 143,45",
   ]);
   const dialog = await upload(page, buffer);
@@ -267,6 +272,9 @@ test("PDF real é lido localmente, revisado, salvo em lote e não reimportado", 
     .first()
     .locator("[name=category]")
     .selectOption("Alimentação");
+  await dialog
+    .getByLabel("Total de lançamentos/compras no PDF (R$)", { exact: true })
+    .fill("143.45");
   await dialog
     .getByLabel("Conferi as compras selecionadas", { exact: false })
     .check();
@@ -369,6 +377,9 @@ test("corridas parecidas são preservadas, linha ignorada pode ser corrigida e a
   await manual.getByLabel("Descrição", { exact: true }).fill("LOJA CORRIGIDA");
   await manual.getByLabel("Valor (R$)", { exact: true }).fill("8");
   await expect(dialog.locator("#import-total")).toContainText("43,86");
+  await dialog
+    .getByLabel("Total de lançamentos/compras no PDF (R$)", { exact: true })
+    .fill("43.86");
   expect(writes).toHaveLength(0);
   await dialog
     .getByLabel("Conferi as compras selecionadas", { exact: false })
@@ -405,4 +416,260 @@ test("corridas parecidas são preservadas, linha ignorada pode ser corrigida e a
   await expect(page.locator(".cards article").nth(1).locator("h2")).toHaveText(
     "4",
   );
+});
+test("divergência em centavos bloqueia salvar antes de qualquer gravação", async ({
+  page,
+}) => {
+  await setup(page);
+  const writes = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/rest/v1/"))
+      writes.push(r.url());
+  });
+  await password(page);
+  await otp(page);
+  const dialog = await upload(
+    page,
+    statementPdf(["05/01 MERCADO 100,00", "06/01 LOJA 50,00"]),
+  );
+  await expect(dialog.locator(".import-row")).toHaveCount(2);
+  await dialog
+    .getByLabel("Total de lançamentos/compras no PDF (R$)", { exact: true })
+    .fill("100");
+  await expect(dialog.locator("#invoice-reconciliation")).toContainText(
+    "50,00 acima",
+  );
+  await dialog
+    .getByLabel("Conferi as compras selecionadas", { exact: false })
+    .check();
+  await dialog
+    .getByRole("button", { name: "Salvar compras selecionadas" })
+    .click();
+  await expect(dialog.locator("#import-error")).toContainText("não confere");
+  expect(writes).toHaveLength(0);
+  await dialog
+    .getByLabel("Total de lançamentos/compras no PDF (R$)", { exact: true })
+    .fill("150");
+  await expect(dialog.locator("#invoice-reconciliation")).toContainText(
+    "Soma confere",
+  );
+  await dialog
+    .getByRole("button", { name: "Salvar compras selecionadas" })
+    .click();
+  await expect(page.locator(".import-dialog")).toHaveCount(0);
+  expect(writes).toHaveLength(1);
+});
+test("seção de futuras fica fora da soma atual e continua visível para auditoria", async ({
+  page,
+}) => {
+  await setup(page);
+  await password(page);
+  await otp(page);
+  const dialog = await upload(
+    page,
+    statementPdf([
+      "Lancamentos: compras e saques",
+      "05/01 MERCADO 100,00",
+      "06/01 LOJA 50,00",
+      "Compras parceladas - proximas faturas",
+      "06/01 LOJA 75,00",
+    ]),
+  );
+  await expect(dialog.locator(".import-row")).toHaveCount(2);
+  await expect(dialog.locator("#import-total")).toContainText("150,00");
+  await dialog.getByText("Ver 1 linhas não importadas automaticamente").click();
+  await expect(dialog.locator(".ignored-line")).toContainText("próxima fatura");
+});
+test("crédito não aplicado impede tratar compras brutas como valor líquido da fatura", async ({
+  page,
+}) => {
+  await setup(page);
+  const writes = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/rest/v1/"))
+      writes.push(r.url());
+  });
+  await password(page);
+  await otp(page);
+  const dialog = await upload(
+    page,
+    statementPdf(["05/01 MERCADO 100,00", "06/01 ESTORNO -10,00"]),
+  );
+  await expect(dialog.locator(".import-row")).toHaveCount(1);
+  await dialog
+    .getByLabel("Total de lançamentos/compras no PDF (R$)", { exact: true })
+    .fill("90");
+  await expect(dialog.locator("#invoice-reconciliation")).toContainText(
+    "10,00 acima",
+  );
+  await dialog
+    .getByLabel("Conferi as compras selecionadas", { exact: false })
+    .check();
+  await dialog
+    .getByRole("button", { name: "Salvar compras selecionadas" })
+    .click();
+  await expect(dialog.locator("#import-error")).toContainText("não confere");
+  expect(writes).toHaveLength(0);
+});
+test("complemento soma as compras já importadas apenas uma vez na conferência", async ({
+  page,
+}) => {
+  const { importId } = await import("../src/statement.js");
+  const buffer = statementPdf(["05/01 MERCADO 100,00", "06/01 LOJA 50,00"]);
+  const digest = [
+    ...new Uint8Array(await crypto.subtle.digest("SHA-256", buffer)),
+  ]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const existing = {
+    id: await importId(digest, 0),
+    name: "Nubank · 05/01/2026 · MERCADO",
+    cents: 10000,
+    person: "Larissa",
+    type: "expense",
+    date: "2026-01-20",
+    status: "pending",
+    category: "Outros",
+  };
+  await setup(page, { initialEntries: [existing] });
+  const writes = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/rest/v1/entries"))
+      writes.push(r.postDataJSON());
+  });
+  await password(page);
+  await otp(page);
+  const dialog = await upload(page, buffer);
+  await expect(dialog.locator("[name=include]:checked")).toHaveCount(1);
+  await dialog
+    .getByLabel("Total de lançamentos/compras no PDF (R$)", { exact: true })
+    .fill("150");
+  await expect(dialog.locator("#invoice-reconciliation")).toContainText(
+    "Já salvas: R$",
+  );
+  await expect(dialog.locator("#invoice-reconciliation")).toContainText(
+    "Soma confere",
+  );
+  await dialog
+    .getByLabel("Conferi as compras selecionadas", { exact: false })
+    .check();
+  await dialog
+    .getByRole("button", { name: "Salvar compras selecionadas" })
+    .click();
+  await expect(page.locator(".import-dialog")).toHaveCount(0);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toHaveLength(1);
+  expect(writes[0][0].cents).toBe(5000);
+});
+test("valor do boleto é excluído; encargo sem data só entra após revisão e o total passa a conferir", async ({
+  page,
+}) => {
+  await setup(page);
+  const writes = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/rest/v1/entries"))
+      writes.push(r.postDataJSON());
+  });
+  await password(page);
+  await otp(page);
+  const dialog = await upload(
+    page,
+    statementPdf([
+      "20/01/2026 REFERENCIA-FICTICIA 10/01/2026 Uso do Banco Carteira 152,85",
+      "Pagamento minimo R$ 15,00",
+      "Valor total financiado R$ 137,85",
+      "Encargos R$ 10,00",
+      "IOF R$ 0,80",
+      "Lancamentos: compras e saques",
+      "05/01 MERCADO 100,00",
+      "06/01 LOJA 50,00",
+      "Juros de mora 2,50",
+      "IOF 0,35",
+    ]),
+  );
+  await expect(dialog.locator(".import-row")).toHaveCount(2);
+  await expect(dialog.locator("#import-total")).toContainText("150,00");
+  await dialog
+    .getByLabel("Total de lançamentos/compras no PDF (R$)", { exact: true })
+    .fill("152.85");
+  await expect(dialog.locator("#invoice-reconciliation")).toContainText(
+    "2,85 abaixo",
+  );
+  await dialog.getByText("Ver 5 linhas não importadas automaticamente").click();
+  await expect(dialog.locator(".ignored-line").first()).toContainText(
+    "Dados do boleto omitidos",
+  );
+  await expect(
+    dialog.locator(".ignored-line").first().getByRole("button"),
+  ).toHaveCount(0);
+  for (const button of await dialog.locator("[data-recover]").all()) {
+    await button.click();
+    const row = dialog.locator(".import-row").last();
+    await row.getByLabel("Data da compra", { exact: true }).fill("2026-01-20");
+  }
+  await expect(dialog.locator("#invoice-reconciliation")).toContainText(
+    "Soma confere",
+  );
+  await dialog
+    .getByLabel("Conferi as compras selecionadas", { exact: false })
+    .check();
+  await dialog
+    .getByRole("button", { name: "Salvar compras selecionadas" })
+    .click();
+  await expect(page.locator(".import-dialog")).toHaveCount(0);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toHaveLength(4);
+  expect(writes[0].reduce((sum, x) => sum + x.cents, 0)).toBe(15285);
+  expect(JSON.stringify(writes)).not.toContain("REFERENCIA-FICTICIA");
+});
+test("PDF em duas colunas recupera compras sem importar limite e separa compras do valor do boleto", async ({
+  page,
+}) => {
+  await setup(page);
+  const writes = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/rest/v1/entries"))
+      writes.push(r.postDataJSON());
+  });
+  await password(page);
+  await otp(page);
+  const buffer = statementPdf([
+    { text: "05/01 MERCADO", x: 20, y: 700 },
+    { text: "100,00", x: 250, y: 700 },
+    { text: "Limite total 800,00", x: 330, y: 700 },
+    { text: "06/01 LOJA", x: 20, y: 680 },
+    { text: "50,00", x: 250, y: 680 },
+    { text: "07/01 UBER", x: 330, y: 680 },
+    { text: "10,00", x: 550, y: 680 },
+    { text: "08/01 UBER", x: 330, y: 660 },
+    { text: "5,00", x: 550, y: 660 },
+    { text: "09/01 LOJA", x: 20, y: 640 },
+    { text: "30,00", x: 250, y: 640 },
+  ]);
+  const dialog = await upload(page, buffer);
+  await expect(dialog.locator(".import-row")).toHaveCount(5);
+  await expect(dialog.locator("#import-total")).toContainText("195,00");
+  await dialog
+    .getByLabel("Total de lançamentos/compras no PDF (R$)", { exact: true })
+    .fill("195");
+  await dialog
+    .getByLabel("Valor a pagar no boleto (R$) — opcional", { exact: true })
+    .fill("180");
+  await expect(dialog.locator("#invoice-reconciliation")).toContainText(
+    "Soma confere",
+  );
+  await expect(dialog.locator("#payable-reference")).toContainText("15,00");
+  await expect(dialog.locator("#payable-reference")).toContainText(
+    "não é adicionada como despesa",
+  );
+  await dialog
+    .getByLabel("Conferi as compras selecionadas", { exact: false })
+    .check();
+  await dialog
+    .getByRole("button", { name: "Salvar compras selecionadas" })
+    .click();
+  await expect(page.locator(".import-dialog")).toHaveCount(0);
+  expect(writes[0]).toHaveLength(5);
+  expect(writes[0].reduce((n, x) => n + x.cents, 0)).toBe(19500);
+  expect(writes[0].every((x) => x.type === "expense")).toBe(true);
 });

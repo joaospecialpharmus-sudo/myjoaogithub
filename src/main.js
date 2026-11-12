@@ -1,4 +1,5 @@
 import "./style.css";
+import { assertInvoiceMatches } from "./reconciliation.js";
 import { cardsView } from "./cards-ui.js";
 let cardBank = "",
   cardPerson = "";
@@ -149,8 +150,12 @@ function bind() {
   document.querySelector("#import-pdf").onclick = () =>
     openStatementImport({
       getEntries: () => items,
-      onSave: async (entries) => {
+      onSave: async (entries, invoice) => {
         if (!isVerified()) throw Error("Entre novamente antes de importar.");
+        const latest = await readAll("entries", "date");
+        if (!isVerified()) throw Error("Entre novamente antes de importar.");
+        items = latest;
+        assertInvoiceMatches({ entries, existing: latest, ...invoice });
         await secureQuery(
           client
             .from("entries")

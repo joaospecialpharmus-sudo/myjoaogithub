@@ -1,11 +1,13 @@
 import { esc, isVerified } from "./security.js";
 import {
   parseStatementLines,
+  findGrossStatementTotal,
   importId,
   importedName,
   markImportDuplicates,
   sameEntry,
 } from "./statement.js";
+import { reconcileInvoice, assertInvoiceMatches } from "./reconciliation.js";
 import { toCents } from "./finance.js";
 export function openStatementImport({ getEntries, onSave }) {
   const dialog = document.createElement("dialog");
@@ -92,7 +94,12 @@ export function openStatementImport({ getEntries, onSave }) {
       rows = markImportDuplicates(rows, getEntries());
       if (!active() || version !== generation) return;
       status.textContent = `${rows.length} compras candidatas. ${parsed.ignored} linhas precisam de revisão e estão disponíveis abaixo. A leitura pode ser parcial: confira com o PDF. Compras em dias diferentes ou com valores diferentes são preservadas; não há agrupamento por semelhança.`;
-      review.innerHTML = `<h3>Revise antes de salvar</h3><p>Banco: ${esc(context.bank)} · Responsável: ${esc(context.person)} · Vencimento: ${esc(context.due.split("-").reverse().join("/"))}. Os totais se referem somente às compras selecionadas.</p><form id="import-confirm"><div class="import-rows"></div><button type="button" id="add-missing">+ Adicionar compra que faltou</button><p id="import-total"></p><label class="include"><input type="checkbox" name="reviewed" required> Conferi as compras selecionadas, os valores e o vencimento com a fatura.</label><button type="submit" class="primary">Salvar compras selecionadas</button></form>${parsed.rejected.length ? `<details class="ignored-lines"><summary>Ver ${parsed.rejected.length} linhas não importadas automaticamente</summary><p>Pagamentos, totais e estornos não devem ser incluídos como compras. As linhas abaixo ficam somente neste aparelho até você decidir incluir uma compra.</p>${parsed.rejected.map((r, i) => `<article class="ignored-line"><strong>${esc(r.reason)}</strong><p>${esc(r.line)}</p><button type="button" data-recover="${i}">Revisar e incluir como compra</button></article>`).join("")}</details>` : ""}`;
+      review.innerHTML = `<h3>Revise antes de salvar</h3><p>Banco: ${esc(context.bank)} · Responsável: ${esc(context.person)} · Vencimento: ${esc(context.due.split("-").reverse().join("/"))}. Os totais se referem somente às compras selecionadas.</p><form id="import-confirm"><div class="import-rows"></div><button type="button" id="add-missing">+ Adicionar compra que faltou</button><p id="import-total"></p><section class="invoice-check"><label>Total de lançamentos/compras no PDF (R$)<input name="official_total" type="number" min="0.01" max="1000000000" step="0.01" required placeholder="Total dos lançamentos atuais"></label><p id="invoice-reconciliation" role="status" aria-live="polite"></p><label>Valor a pagar no boleto (R$) — opcional<input name="payable_total" type="number" min="0" max="1000000000" step="0.01" placeholder="Referência separada das compras"></label><p id="payable-reference"></p><p>A conferência soma as novas compras às já salvas para o mesmo banco, responsável e vencimento. Compare as compras com “Total dos lançamentos atuais” ou “Lançamentos no cartão” do PDF. O valor a pagar do boleto pode ser diferente devido a pagamentos, saldos anteriores ou créditos. Não remova compras reais para forçar a soma. Pagamentos e créditos ainda não são conciliados automaticamente.</p><details id="existing-invoice"><summary>Compras já salvas neste vencimento</summary><div></div></details></section><label class="include"><input type="checkbox" name="reviewed" required> Conferi as compras selecionadas, os valores e o vencimento com a fatura.</label><button type="submit" class="primary">Salvar compras selecionadas</button></form>${parsed.rejected.length ? `<details class="ignored-lines"><summary>Ver ${parsed.rejected.length} linhas não importadas automaticamente</summary><p>Pagamentos, totais e estornos não devem ser incluídos como compras. As linhas abaixo ficam somente neste aparelho até você decidir incluir uma compra.</p>${parsed.rejected.map((r, i) => `<article class="ignored-line"><strong>${esc(r.reason)}</strong><p>${esc(r.line)}</p>${r.recoverable === false ? "<p>Não é um gasto. Esta linha não pode ser importada como compra.</p>" : `<button type="button" data-recover="${i}">Revisar e incluir como compra</button>`}</article>`).join("")}</details>` : ""}`;
+      const detectedTotal = findGrossStatementTotal(lines);
+      if (detectedTotal !== null)
+        review.querySelector("[name=official_total]").value = (
+          detectedTotal / 100
+        ).toFixed(2);
       const rowContainer = review.querySelector(".import-rows");
       function appendRow(r, i, checked = !r.exact && !r.possible) {
         rowContainer.insertAdjacentHTML(
@@ -122,6 +129,21 @@ export function openStatementImport({ getEntries, onSave }) {
             };
           });
       }
+      const expected = () => {
+        const value = review.querySelector("[name=official_total]").value;
+        try {
+          return value ? toCents(value) : null;
+        } catch {
+          return null;
+        }
+      };
+      const reconciliation = (entries) =>
+        reconcileInvoice({
+          entries,
+          existing: getEntries(),
+          ...context,
+          expected: expected(),
+        });
       const total = () => {
         for (const el of rowContainer.querySelectorAll("[data-row]")) {
           const included = el.querySelector("[name=include]").checked;
@@ -131,11 +153,40 @@ export function openStatementImport({ getEntries, onSave }) {
         }
         try {
           const selected = selection();
+          const check = reconciliation(selected);
+          const money = (n) =>
+            (n / 100).toLocaleString("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            });
+          const result = review.querySelector("#invoice-reconciliation");
+          result.dataset.state = check.matches ? "matched" : "unmatched";
+          result.textContent =
+            check.expected === null
+              ? "Informe o total de lançamentos/compras do PDF para conferir antes de salvar."
+              : `Já salvas: ${money(check.savedCents)} + novas: ${money(check.selectedCents)} = ${money(check.total)}. Total de lançamentos informado: ${money(check.expected)}. ${check.matches ? "Soma confere. Confira também as linhas." : `Diferença: ${money(Math.abs(check.difference))} ${check.difference > 0 ? "acima" : "abaixo"} do total de lançamentos informado. Gravação bloqueada até revisar.`}`;
+          const payableValue = review.querySelector(
+            "[name=payable_total]",
+          ).value;
+          const payable =
+            payableValue === "" ? null : Math.round(Number(payableValue) * 100);
+          review.querySelector("#payable-reference").textContent =
+            payable === null
+              ? "O boleto e o limite utilizado não são compras e não entram nesta soma."
+              : `Valor a pagar (referência): ${money(payable)}. Diferença para as compras registradas: ${money(check.total - payable)}. Essa diferença deve ser explicada por pagamentos, créditos ou saldo anterior; não é adicionada como despesa nem abatida automaticamente.`;
+          review.querySelector("#existing-invoice div").innerHTML = check.saved
+            .length
+            ? check.saved
+                .map((x) => `<p>${esc(x.name)} · ${money(x.cents)}</p>`)
+                .join("")
+            : "<p>Nenhuma compra já salva neste banco, responsável e vencimento.</p>";
           review.querySelector("#import-total").textContent =
             `${selected.length} selecionadas · Total: ${(selected.reduce((sum, x) => sum + x.cents, 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`;
         } catch {
           review.querySelector("#import-total").textContent =
             "Confira os campos das compras selecionadas.";
+          review.querySelector("#invoice-reconciliation").textContent =
+            "Preencha os campos válidos antes de conferir o total.";
         }
       };
       review.querySelector("#import-confirm").addEventListener("input", total);
@@ -146,7 +197,7 @@ export function openStatementImport({ getEntries, onSave }) {
           index: raw?.index ?? `manual:${crypto.randomUUID()}`,
           purchaseDate: raw?.purchaseDate || "",
           description: raw?.description || "",
-          cents: 0,
+          cents: raw?.suggestedCents || 0,
           manual: true,
         };
         r.entry = await buildEntry(r);
@@ -187,6 +238,12 @@ export function openStatementImport({ getEntries, onSave }) {
           const entries = selection();
           if (!entries.length)
             throw Error("Selecione pelo menos uma compra nova.");
+          assertInvoiceMatches({
+            entries,
+            existing: getEntries(),
+            ...context,
+            expected: expected(),
+          });
           const matches = entries.filter((x) =>
             getEntries().some((old) => sameEntry(old, x)),
           );
@@ -197,10 +254,13 @@ export function openStatementImport({ getEntries, onSave }) {
             )
           )
             return;
-          await onSave(entries);
+          await onSave(entries, { ...context, expected: expected() });
           if (active()) close();
         } catch (err) {
-          if (active()) error.textContent = err.message;
+          if (active()) {
+            error.textContent = err.message;
+            total();
+          }
         } finally {
           save.disabled = false;
         }

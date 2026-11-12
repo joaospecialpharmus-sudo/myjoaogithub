@@ -722,3 +722,28 @@ textarea {
     flex-wrap: wrap;
   }
 }
+.invoice-check {
+  border: 1px solid #d8dfd1;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 20px 0;
+  background: #f7f8f1;
+}
+.invoice-check p {
+  font-size: 12px;
+}
+.invoice-check [data-state="unmatched"] {
+  color: #a33434;
+  font-weight: 600;
+}
+.invoice-check [data-state="matched"] {
+  color: #175c49;
+  font-weight: 600;
+}
+.invoice-check summary {
+  font-size: 12px;
+  cursor: pointer;
+}
+.invoice-check input {
+  max-width: 260px;
+}
