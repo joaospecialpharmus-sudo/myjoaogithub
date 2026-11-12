@@ -35,14 +35,6 @@ export function ocrTsvToLines(tsv, { page = 1, offset = 0 } = {}) {
       .sort((a, b) => a.x - b.x)
       .map((w) => w.text)
       .join(" "),
-    amountBounds: (() => {
-      const amounts = group.words.filter(
-        (w) => /^(?:R\$)?[0-9.,]+$/.test(w.text) && /[,．.]\d{2}$/.test(w.text),
-      );
-      return amounts.length === 1
-        ? { left: amounts[0].x, width: amounts[0].width }
-        : null;
-    })(),
     bounds: {
       top: Math.min(...group.words.map((w) => w.y - w.height / 2)),
       bottom: Math.max(...group.words.map((w) => w.y + w.height / 2)),

@@ -63,3 +63,7 @@ CPF, credenciais bancárias/Serasa, cartões completos e boletos não são solic
 ## Leitura de imagens no aparelho
 
 O OCR funciona com Tesseract.js e modelo de português distribuídos no mesmo site, sem enviar documentos a terceiros. Workers, modelos e motor WebAssembly são servidos em caminhos locais explícitos; a opção de worker por blob é desativada e não há cache de resultados OCR em IndexedDB. A política inclui `wasm-unsafe-eval` apenas para permitir o motor WebAssembly e mantém scripts externos bloqueados. O fechamento da revisão ou o logout cancela o processamento; canvases e workers são liberados ao terminar. O reconhecimento não concede acesso a dados sem a mesma autenticação e RLS.
+
+## Edição manual de valores
+
+A importação permite salvar sem conciliar totais. Os valores podem ser corrigidos na revisão e, após salvar, pelo botão Editar valor em Movimentações ou Cartões. A atualização modifica somente o campo cents do registro selecionado, preservando o ID e os demais dados, sob as mesmas políticas RLS/AAL2. A remoção da conciliação não altera os requisitos de autenticação ou autorização. Não há confirmação de totais obrigatória.

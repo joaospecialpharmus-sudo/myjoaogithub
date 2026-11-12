@@ -1,5 +1,4 @@
 import "./style.css";
-import { assertInvoiceMatches } from "./reconciliation.js";
 import { cardsView } from "./cards-ui.js";
 let cardBank = "",
   cardPerson = "";
@@ -98,7 +97,7 @@ function overview() {
   const pending = current
     .filter((x) => x.status === "pending" && x.type === "expense")
     .sort((a, b) => a.date.localeCompare(b.date));
-  return `<section class="cards"><article class="balance"><span>Saldo do mês</span><h2>${money(t.balance)}</h2><small>Recebido menos despesas pagas</small></article><article><span>↓ Recebimentos</span><h2>${money(t.income)}</h2><small>${money(t.expected)} ainda previstos</small></article><article><span>↑ Despesas pagas</span><h2>${money(t.expenses)}</h2><small>${money(t.pending)} a pagar</small></article><article><span>Previsão de fechamento</span><h2>${money(t.projected)}</h2><small>Inclui entradas e saídas previstas</small></article></section><div class="columns"><section id="transactions" class="panel"><div class="section-head"><div><h2>Movimentações</h2><p>O que entrou e saiu da rotina.</p></div><button class="primary" data-dialog="entry-dialog">+ Novo lançamento</button></div>${current.length ? `<div class="table-wrap"><table><thead><tr><th>Descrição</th><th>Data</th><th>Valor</th><th>Situação</th><th></th></tr></thead><tbody>${current.map((x) => `<tr><td><strong>${esc(x.name)}</strong><small>${esc(x.category)} · ${esc(x.person)}</small></td><td>${dateLabel(x.date)}</td><td class="${x.type === "income" ? "green" : ""}">${x.type === "income" ? "+" : "−"} ${money(x.cents)}</td><td><button class="status" data-toggle="${esc(x.id)}">${x.status === "done" ? (x.type === "income" ? "Recebido" : "Pago") : "Pendente"}</button></td><td><button data-delete="${esc(x.id)}" aria-label="Excluir ${esc(x.name)}">×</button></td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><span>↗</span><h3>O primeiro passo é enxergar.</h3><p>Adicione os recebimentos e as contas de vocês.</p><button data-dialog="entry-dialog">Adicionar primeiro lançamento →</button></div>'}</section><section id="bills" class="panel"><h2>No radar</h2><p>Próximas contas deste mês</p>${pending.length ? pending.map((x) => `<div class="bill"><div class="date">${esc(x.date.slice(8))}</div><div><strong>${esc(x.name)}</strong><small>${esc(x.category)}</small></div><b>${money(x.cents)}</b></div>`).join("") : '<div class="quiet">✓<h3>Tudo tranquilo por aqui</h3><p>As contas pendentes aparecerão aqui.</p></div>'}<div class="tip"><strong>Planejem com antecedência</strong><p>Cadastrem a faculdade, o financiamento e as parcelas dos acordos.</p></div></section></div>`;
+  return `<section class="cards"><article class="balance"><span>Saldo do mês</span><h2>${money(t.balance)}</h2><small>Recebido menos despesas pagas</small></article><article><span>↓ Recebimentos</span><h2>${money(t.income)}</h2><small>${money(t.expected)} ainda previstos</small></article><article><span>↑ Despesas pagas</span><h2>${money(t.expenses)}</h2><small>${money(t.pending)} a pagar</small></article><article><span>Previsão de fechamento</span><h2>${money(t.projected)}</h2><small>Inclui entradas e saídas previstas</small></article></section><div class="columns"><section id="transactions" class="panel"><div class="section-head"><div><h2>Movimentações</h2><p>O que entrou e saiu da rotina.</p></div><button class="primary" data-dialog="entry-dialog">+ Novo lançamento</button></div>${current.length ? `<div class="table-wrap"><table><thead><tr><th>Descrição</th><th>Data</th><th>Valor</th><th>Situação</th><th></th></tr></thead><tbody>${current.map((x) => `<tr><td><strong>${esc(x.name)}</strong><small>${esc(x.category)} · ${esc(x.person)}</small></td><td>${dateLabel(x.date)}</td><td class="${x.type === "income" ? "green" : ""}">${x.type === "income" ? "+" : "−"} ${money(x.cents)}</td><td><button class="status" data-toggle="${esc(x.id)}">${x.status === "done" ? (x.type === "income" ? "Recebido" : "Pago") : "Pendente"}</button></td><td><button data-edit-value="${esc(x.id)}">Editar valor</button><button data-delete="${esc(x.id)}" aria-label="Excluir ${esc(x.name)}">×</button></td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><span>↗</span><h3>O primeiro passo é enxergar.</h3><p>Adicione os recebimentos e as contas de vocês.</p><button data-dialog="entry-dialog">Adicionar primeiro lançamento →</button></div>'}</section><section id="bills" class="panel"><h2>No radar</h2><p>Próximas contas deste mês</p>${pending.length ? pending.map((x) => `<div class="bill"><div class="date">${esc(x.date.slice(8))}</div><div><strong>${esc(x.name)}</strong><small>${esc(x.category)}</small></div><b>${money(x.cents)}</b></div>`).join("") : '<div class="quiet">✓<h3>Tudo tranquilo por aqui</h3><p>As contas pendentes aparecerão aqui.</p></div>'}<div class="tip"><strong>Planejem com antecedência</strong><p>Cadastrem a faculdade, o financiamento e as parcelas dos acordos.</p></div></section></div>`;
 }
 function debtView() {
   return `<section class="panel debt-panel"><div class="section-head"><div><h2>Dívidas e propostas</h2><p>Registro manual das consultas de vocês no Serasa ou diretamente com o credor.</p></div><button class="primary" data-dialog="debt-dialog">+ Cadastrar dívida</button></div><div class="tip"><strong>Ofertas registradas, sem consulta automática</strong><p>Consulte o Serasa pelos canais oficiais e registre aqui o valor total e a validade. Uma proposta registrada não confirma que ela continua disponível e não significa que foi aceita.</p></div>${
@@ -136,9 +135,49 @@ const dialog = (id, title, body, submit) =>
 function render() {
   document.querySelector("#app").innerHTML =
     `<aside><a class="brand" href="#">a dois<span>●</span></a><p>FINANÇAS DA CASA</p><nav><button data-view="overview" class="${view === "overview" ? "active" : ""}">◫ &nbsp; Visão do mês</button><button data-view="cards" class="${view === "cards" ? "active" : ""}">▤ &nbsp; Cartões</button><button data-view="debts" class="${view === "debts" ? "active" : ""}">⇄ &nbsp; Dívidas e propostas</button></nav><div class="aside-bottom">Um plano em comum.<br>Uma vida mais leve.<small>Espaço privado do casal</small><button id="logout">Sair com segurança</button></div></aside><main><header><div><span class="eyebrow">SEU DINHEIRO, EM SINTONIA</span><h1>${view === "overview" ? "Visão do mês" : view === "cards" ? "Resumo dos cartões" : "Dívidas e propostas"}</h1><p>Clareza para cuidar do presente e planejar juntos.</p></div>${view !== "debts" ? `<label class="month">${view === "cards" ? "Mês de vencimento" : "Período"}<input id="month" type="month" value="${month}" required></label>` : ""}</header><div class="mobile-nav"><button data-view="overview">Visão do mês</button><button data-view="cards">Cartões</button><button data-view="debts">Dívidas</button><button data-logout>Sair</button></div><section class="notice"><span>Sessão com dois fatores. Saída automática após 15 minutos sem atividade.</span><div><button id="import-pdf">Importar fatura PDF</button><button id="refresh">Atualizar</button><button id="export">Exportar dados ↓</button><button id="password">Alterar senha</button></div></section><p id="page-error" role="alert"></p>${view === "overview" ? overview() : view === "cards" ? cardsView(items, { month, bank: cardBank, person: cardPerson }) : debtView()}<footer>A dois · Cada escolha conta.</footer></main>${dialog("entry-dialog", "Novo lançamento", `<label>Descrição<input name="name" required maxlength="100" placeholder="Ex.: salário, conta de luz"></label><div class="form-grid"><label>Tipo<select name="type"><option value="expense">Despesa</option><option value="income">Recebimento</option></select></label><label>Valor (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" required></label><label>Data / vencimento<input name="date" type="date" value="${localDate()}" required></label><label>Situação<select name="status"><option value="pending">Previsto / pendente</option><option value="done">Recebido / pago</option></select></label><label>Responsável<select name="person">${people}</select></label><label>Categoria<select name="category">${categories.map((c) => `<option>${c}</option>`).join("")}</select></label></div>`, "Salvar lançamento")}${dialog("debt-dialog", "Cadastrar dívida", `<label>Credor<input name="creditor" required maxlength="100"></label><div class="form-grid"><label>Valor total de referência (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" required></label><label>Responsável<select name="person">${people}</select></label></div><label>Observações (sem CPF ou senha do Serasa)<textarea name="notes" maxlength="1000"></textarea></label>`, "Salvar dívida")}${dialog("offer-dialog", "Registrar proposta", `<input name="debt_id" type="hidden"><p>Preencha o total da proposta, incluindo todas as parcelas e a entrada, se houver.</p><div class="form-grid"><label>Valor total proposto (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" required></label><label>Número de parcelas<input name="installments" type="number" min="1" max="600" value="1" required></label><label>Data da consulta<input name="observed_on" type="date" value="${localDate()}" required></label><label>Válida até (opcional)<input name="valid_until" type="date"></label></div><label>Canal e condições da proposta<textarea name="notes" maxlength="1000" placeholder="Ex.: consulta manual no Serasa; condições de entrada"></textarea></label>`, "Salvar proposta")}${dialog("password-dialog", "Alterar senha", '<label>Nova senha<input name="password" type="password" autocomplete="new-password" minlength="14" maxlength="128" required></label><p>Use uma senha exclusiva com pelo menos 14 caracteres. Após a alteração, todas as suas sessões serão encerradas.</p>', "Alterar e sair")}`;
+  document
+    .querySelector("#app")
+    .insertAdjacentHTML(
+      "beforeend",
+      dialog(
+        "edit-value-dialog",
+        "Editar valor",
+        '<input name="id" type="hidden"><p id="editing-entry-name"></p><label>Novo valor (R$)<input name="amount" type="number" min="0.01" max="1000000000" step="0.01" required inputmode="decimal"></label>',
+        "Salvar valor",
+      ),
+    );
   bind();
 }
 function bind() {
+  document.querySelectorAll("[data-edit-value]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        const entry = items.find((x) => x.id === button.dataset.editValue);
+        if (!entry) return;
+        const modal = document.querySelector("#edit-value-dialog");
+        modal.querySelector("[name=id]").value = entry.id;
+        modal.querySelector("[name=amount]").value = (
+          entry.cents / 100
+        ).toFixed(2);
+        modal.querySelector("#editing-entry-name").textContent = entry.name;
+        modal.querySelector(".form-error").textContent = "";
+        modal.showModal();
+      }),
+  );
+  bindForm("edit-value-dialog", async (form) => {
+    const id = form.get("id");
+    if (!items.some((x) => x.id === id))
+      throw Error("Este lançamento não está disponível. Atualize os dados.");
+    const updated = await secureQuery(
+      client
+        .from("entries")
+        .update({ cents: toCents(form.get("amount")) })
+        .eq("id", id)
+        .select("id"),
+    );
+    if (!updated.length)
+      throw Error("O lançamento não está mais disponível. Atualize os dados.");
+  });
   document.querySelector("#card-bank")?.addEventListener("change", (e) => {
     cardBank = e.target.value;
     render();
@@ -150,12 +189,8 @@ function bind() {
   document.querySelector("#import-pdf").onclick = () =>
     openStatementImport({
       getEntries: () => items,
-      onSave: async (entries, invoice) => {
+      onSave: async (entries) => {
         if (!isVerified()) throw Error("Entre novamente antes de importar.");
-        const latest = await readAll("entries", "date");
-        if (!isVerified()) throw Error("Entre novamente antes de importar.");
-        items = latest;
-        assertInvoiceMatches({ entries, existing: latest, ...invoice });
         await secureQuery(
           client
             .from("entries")

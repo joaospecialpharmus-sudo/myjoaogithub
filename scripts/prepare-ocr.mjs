@@ -1,4 +1,4 @@
-import { mkdir, copyFile } from "node:fs/promises";
+import { mkdir, copyFile, rm } from "node:fs/promises";
 export async function prepareOcr() {
   await mkdir("public/ocr", { recursive: true });
   await copyFile(
@@ -18,9 +18,6 @@ export async function prepareOcr() {
     "node_modules/@tesseract.js-data/por/4.0.0_best_int/por.traineddata.gz",
     "public/ocr/por.traineddata.gz",
   );
-  await copyFile(
-    "node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz",
-    "public/ocr/eng.traineddata.gz",
-  );
+  await rm("public/ocr/eng.traineddata.gz", { force: true });
 }
 if (process.argv[1]?.endsWith("prepare-ocr.mjs")) await prepareOcr();

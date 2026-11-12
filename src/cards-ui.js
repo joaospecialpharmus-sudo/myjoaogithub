@@ -33,7 +33,7 @@ export function cardsView(entries, filters) {
       ? `<div class="columns"><section class="panel"><h2>Por banco e responsável</h2>${summary.groups
           .map(
             (g) =>
-              `<article class="card-summary"><div class="section-head"><div><h3>${esc(g.bank)} · ${esc(g.person)}</h3><p>${g.count} compra(s) · Pendente: ${money(g.pending)}</p></div><strong>${money(g.total)}</strong></div><details><summary>Ver compras deste cartão</summary><div class="table-wrap"><table><thead><tr><th>Data da compra</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead><tbody>${[
+              `<article class="card-summary"><div class="section-head"><div><h3>${esc(g.bank)} · ${esc(g.person)}</h3><p>${g.count} compra(s) · Pendente: ${money(g.pending)}</p></div><strong>${money(g.total)}</strong></div><details><summary>Ver compras deste cartão</summary><div class="table-wrap"><table><thead><tr><th>Data da compra</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th></tr></thead><tbody>${[
                 ...g.purchases,
               ]
                 .sort(
@@ -43,7 +43,7 @@ export function cardsView(entries, filters) {
                 )
                 .map(
                   (p) =>
-                    `<tr><td>${date(p.purchaseDate)}</td><td>${esc(p.merchant)}</td><td>${esc(p.category)}</td><td>${money(p.cents)}</td></tr>`,
+                    `<tr><td>${date(p.purchaseDate)}</td><td>${esc(p.merchant)}</td><td>${esc(p.category)}</td><td>${money(p.cents)}</td><td><button data-edit-value="${esc(p.id)}">Editar valor</button></td></tr>`,
                 )
                 .join("")}</tbody></table></div></details></article>`,
           )

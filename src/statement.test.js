@@ -276,26 +276,6 @@ test("tabela de largura inteira mantém descrição e valor juntos", () => {
     [10, 11],
   );
 });
-test("referência de compras vem apenas do total de lançamentos, nunca de limites, boleto ou simulação", async () => {
-  const { findGrossStatementTotal } = await import("./statement.js");
-  assert.equal(
-    findGrossStatementTotal([
-      "Limite utilizado 180,00",
-      "Valor a pagar 180,00",
-      "Total a pagar 282,80",
-      "Total dos lançamentos atuais R$ 195,00",
-    ]),
-    19500,
-  );
-  assert.equal(findGrossStatementTotal(["Total a pagar 282,80"]), null);
-  assert.equal(
-    findGrossStatementTotal([
-      "Total dos lançamentos atuais 195,00",
-      "Total dos lançamentos atuais 200,00",
-    ]),
-    null,
-  );
-});
 test("C6: cabeçalho retorna da simulação e datas compactas e pagamento sem espaços não viram gastos errados", () => {
   const p = parseStatementLines(
     [
@@ -315,26 +295,4 @@ test("C6: cabeçalho retorna da simulação e datas compactas e pagamento sem es
     [2000, 3000, 1250],
   );
   assert.equal(p.rows[2].purchaseDate, "2026-10-22");
-});
-test("C6: referência global soma compras nacionais e internacionais e não usa saldo de limite ou boleto", async () => {
-  const { findGrossStatementTotal } = await import("./statement.js");
-  assert.equal(
-    findGrossStatementTotal([
-      "Compras nacionais 100,00",
-      "Compras internacionais 0,00",
-      "Total a pagar 95,00",
-      "Limite utilizado 95,00",
-    ]),
-    10000,
-  );
-});
-test("total OCR ambíguo fica para confirmação manual em vez de preencher valor duvidoso", async () => {
-  const { findGrossStatementTotal } = await import("./statement.js");
-  assert.equal(
-    findGrossStatementTotal([
-      { text: "Compras nacionais 100,00", referenceUncertain: true },
-      { text: "Compras internacionais 0,00" },
-    ]),
-    null,
-  );
 });

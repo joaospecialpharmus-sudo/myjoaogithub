@@ -32,7 +32,6 @@ for (const f of readdirSync("dist/assets")) {
     );
 }
 const expectedOcr = [
-  "eng.traineddata.gz",
   "por.traineddata.gz",
   "tesseract-core-lstm.wasm.js",
   "tesseract-core-relaxedsimd-lstm.wasm.js",

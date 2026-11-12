@@ -19,7 +19,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
-    "@tesseract.js-data/eng": "^1.0.0",
     "@tesseract.js-data/por": "^1.0.0",
     "pdfjs-dist": "^6.5.438",
     "qrcode": "^1.5.4",
