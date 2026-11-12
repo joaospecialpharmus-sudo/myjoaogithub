@@ -29,7 +29,7 @@ Configure no ambiente de build (não no Git público):
 - `VITE_SUPABASE_URL`: URL HTTPS do projeto.
 - `VITE_SUPABASE_PUBLISHABLE_KEY`: chave publicável/anon.
 
-Para desenvolvimento local, copie `.env.example` para `.env.local` (ignorado no Git) e preencha somente esses dois campos. Em produção, o build injeta a URL e chave publicável nos arquivos públicos, como previsto pelo Supabase. Execute `npm run build` novamente e publique `dist` na branch `gh-pages`. Nenhuma conta ou dado financeiro vai no build.
+Para desenvolvimento local, copie `.env.example` para `.env.local` (ignorado no Git) e preencha somente esses dois campos. Em produção, o build injeta a URL e chave publicável nos arquivos públicos, como previsto pelo Supabase. Execute `npm run build` novamente e `npm run deploy:pages` para publicar apenas `dist` na branch `gh-pages`. O script preserva o histórico e recusa artefatos de teste. Nenhuma conta ou dado financeiro vai no build.
 
 Se o ambiente na nuvem tiver rede restrita, permita o hostname exato do projeto Supabase para validar as APIs. Não é preciso liberar todos os projetos Supabase.
 

@@ -34,6 +34,8 @@ npm test
 npm run test:e2e # requer Chromium; CHROMIUM_PATH ajusta o executável
 npm run build
 npm run preview
+# Após validar configuração e segurança:
+npm run deploy:pages
 ```
 
 Os testes RLS rodam num PostgreSQL local via PGlite; os testes de navegador simulam Supabase. Login/MFA real, políticas do projeto, recuperação e sincronização entre aparelhos ainda precisam de validação depois da configuração. O build produz arquivos estáticos com CSP e `.nojekyll`, prontos para a branch `gh-pages` do GitHub Pages. Valores de `VITE_…` são públicos no bundle: use exclusivamente chave publicável/anon. O build rejeita chaves secretas reconhecidas.
