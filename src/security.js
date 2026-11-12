@@ -13,6 +13,9 @@ const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 export const client =
   url && key
     ? createClient(url, key, {
+        global: {
+          fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+        },
         auth: {
           storage: sessionStorage,
           storageKey: "adois-auth-v2",
@@ -25,6 +28,7 @@ export const client =
 let ready;
 let failure;
 let idleTimer;
+let lastActivityAt = 0;
 let factorId;
 let verified = false;
 let authVersion = 0;
@@ -178,6 +182,7 @@ export async function logout() {
 }
 function touch() {
   if (!verified) return;
+  lastActivityAt = Date.now();
   clearTimeout(idleTimer);
   idleTimer = setTimeout(
     () => {
@@ -191,6 +196,17 @@ export async function startSecurity(onReady, onClear) {
   failure = onClear;
   for (const event of ["pointerdown", "keydown", "touchstart"])
     window.addEventListener(event, touch, { passive: true });
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) logout();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (
+      document.visibilityState === "visible" &&
+      verified &&
+      Date.now() - lastActivityAt >= 15 * 60 * 1000
+    )
+      logout();
+  });
   client?.auth.onAuthStateChange((event) => {
     if (event === "SIGNED_OUT") {
       verified = false;

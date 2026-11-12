@@ -67,3 +67,11 @@ O OCR funciona com Tesseract.js e modelo de português distribuídos no mesmo si
 ## Edição manual de valores
 
 A importação permite salvar sem conciliar totais. Os valores podem ser corrigidos na revisão e, após salvar, pelo botão Editar valor em Movimentações ou Cartões. A atualização modifica somente o campo cents do registro selecionado, preservando o ID e os demais dados, sob as mesmas políticas RLS/AAL2. A remoção da conciliação não altera os requisitos de autenticação ou autorização. Não há confirmação de totais obrigatória.
+
+## Instalação PWA e conferência em produção
+
+O manifesto e os ícones são públicos, assim como a tela de login. Qualquer pessoa pode abrir essa tela ou instalar o PWA; o acesso financeiro continua exigindo uma conta autorizada, senha, TOTP e aprovação das políticas RLS em cada requisição. Administradores e credenciais privilegiadas do Supabase não ficam sujeitos à mesma limitação de usuários comuns; mantenha MFA na conta administradora e nunca publique credenciais administrativas.
+
+O service worker não cria caches e não intercepta chamadas ao Supabase. Sua navegação usa rede sem cache e retorna apenas uma mensagem genérica quando offline. O SDK usa `cache: no-store`. Voltar de uma página restaurada pelo navegador bloqueia a interface; ao retornar do segundo plano, o tempo real de inatividade é conferido. São proteções locais e não substituem expiração/revogação de tokens no serviço.
+
+Para uma revisão inicial do projeto real, execute `supabase/security-check.sql` no SQL Editor. Ele é somente leitura e retorna indicadores e expressões das políticas, sem dados pessoais. Confira se há exatamente dois membros autorizados, fatores TOTP ativos, RLS em todas as tabelas e ausência de permissões/políticas inesperadas. Revise também o conteúdo integral das expressões retornadas. Uma leitura de metadados não é uma auditoria completa nem prova, sozinha, que todas as requisições de acesso indevido seriam recusadas. A rede do ambiente Codex pode impedir a validação real; não confunda erro de rede com recusa de autorização do banco.

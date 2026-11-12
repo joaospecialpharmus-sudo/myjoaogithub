@@ -10,8 +10,11 @@ if (
     ".nojekyll",
     "THIRD_PARTY_NOTICES.txt",
     "assets",
+    "icons",
     "index.html",
+    "manifest.webmanifest",
     "ocr",
+    "sw.js",
   ])
 )
   throw Error("dist contém arquivos inesperados; faça um build limpo.");
@@ -31,6 +34,11 @@ for (const f of readdirSync("dist/assets")) {
       "Não publique artefatos de teste. Execute npm run build sem as variáveis de teste.",
     );
 }
+if (
+  JSON.stringify(readdirSync("dist/icons").sort()) !==
+  JSON.stringify(["icon-180.png", "icon-192.png", "icon-512.png"])
+)
+  throw Error("Ícones inesperados no build.");
 const expectedOcr = [
   "por.traineddata.gz",
   "tesseract-core-lstm.wasm.js",

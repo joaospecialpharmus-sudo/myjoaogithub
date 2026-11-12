@@ -715,3 +715,118 @@ test("importa sem conciliar totais e permite corrigir valores antes e depois de 
   await again.getByRole("button", { name: "Fechar importação" }).click();
   await expect(page.locator(".cards article").first()).toContainText("107,35");
 });
+test("mostra instruções de instalação sem permitir acesso a dados antes do login", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Instalar app", exact: false })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Instalar A dois" }),
+  ).toBeVisible();
+  await expect(page.locator("#install-help")).toContainText("iPhone");
+  await expect(page.locator("#install-help")).toContainText("Android");
+  await expect(page.locator("#transactions")).toHaveCount(0);
+  await page.getByRole("button", { name: "Fechar instruções" }).click();
+});
+test("voltar de página restaurada do navegador exige autenticação novamente", async ({
+  page,
+}) => {
+  await setup(page);
+  await password(page);
+  await otp(page);
+  await expect(
+    page.getByRole("heading", { name: "Visão do mês" }),
+  ).toBeVisible();
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    ),
+  );
+  await expect(
+    page.getByRole("heading", { name: "Entrar com segurança" }),
+  ).toBeVisible();
+  await expect(page.locator("#transactions")).toHaveCount(0);
+});
+test("app instalável tem manifesto válido e offline não expõe dados privados nem cria cache de API", async ({
+  page,
+}) => {
+  test.skip(
+    !process.env.ADOIS_E2E_PREVIEW,
+    "Service worker é validado no build de produção.",
+  );
+  await page.addInitScript(() => {
+    const native = window.fetch;
+    window.__privateCacheModes = [];
+    window.fetch = (input, init) => {
+      const url =
+        typeof input === "string" ? input : input.url || String(input);
+      if (url.includes("supabase.co"))
+        window.__privateCacheModes.push(init?.cache);
+      return native(input, init);
+    };
+  });
+  const entry = {
+    id: "10000000-0000-4000-8000-000000000001",
+    name: "DADO PRIVADO FICTICIO",
+    cents: 1000,
+    type: "expense",
+    status: "pending",
+    person: "Larissa",
+    category: "Outros",
+    date: "2026-01-20",
+  };
+  await setup(page, { initialEntries: [entry] });
+  await password(page);
+  await otp(page);
+  await page.locator("#month").fill("2026-01");
+  await page.locator("#month").dispatchEvent("change");
+  await expect(page.locator("#transactions")).toContainText(
+    "DADO PRIVADO FICTICIO",
+  );
+  const manifestLink = await page
+    .locator("link[rel=manifest]")
+    .getAttribute("href");
+  const manifestUrl = new URL(manifestLink, page.url()).href;
+  const manifest = await (await page.request.get(manifestUrl)).json();
+  expect(manifest.display).toBe("standalone");
+  expect(manifest.icons.length).toBeGreaterThanOrEqual(2);
+  for (const icon of manifest.icons) {
+    const response = await page.request.get(
+      new URL(icon.src, manifestUrl).href,
+    );
+    expect(response.ok()).toBe(true);
+    const bytes = await response.body();
+    expect(bytes.subarray(1, 4).toString()).toBe("PNG");
+  }
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await expect
+    .poll(() =>
+      page.evaluate(() => Boolean(navigator.serviceWorker.controller)),
+    )
+    .toBe(true);
+  expect(await page.evaluate(() => caches.keys())).toEqual([]);
+  expect(
+    await page.evaluate(() => window.__privateCacheModes.length),
+  ).toBeGreaterThan(0);
+  expect(
+    await page.evaluate(() =>
+      window.__privateCacheModes.every((mode) => mode === "no-store"),
+    ),
+  ).toBe(true);
+  await page.context().setOffline(true);
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Sem conexão" }),
+  ).toBeVisible();
+  await expect(page.getByText("DADO PRIVADO FICTICIO")).toHaveCount(0);
+  expect(await page.evaluate(() => caches.keys())).toEqual([]);
+  await page.context().setOffline(false);
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Entrar com segurança" }),
+  ).toBeVisible();
+  await expect(page.locator("#transactions")).toHaveCount(0);
+});

@@ -61,3 +61,20 @@ npm run deploy:pages
 Testes RLS usam PostgreSQL local/PGlite; testes públicos de navegador simulam Supabase. A configuração real de autorização continua precisando ser verificada no projeto antes de dados reais. O deploy publica somente arquivos estáticos e recursos OCR na branch `gh-pages`, preservando seu histórico. Variáveis `VITE_…` são públicas no bundle: somente URL e chave publicável/anon são permitidas. O build rejeita chaves secretas reconhecidas. Licenças de dependências seguem no artefato `THIRD_PARTY_NOTICES.txt`.
 
 Sem consulta automática ao Serasa, integração bancária automática, IA, saldo inicial, recorrências, notificações, PWA offline ou restauração de exportações. Consulte [os componentes pesquisados](docs/componentes.md). Não publique arquivos `.env`, exportações, senhas ou documentos financeiros no GitHub.
+
+## Instalar no celular
+
+A versão PWA pode ser adicionada à tela inicial e abre em janela própria, com o mesmo login e autenticador.
+
+- iPhone: abra o site no Safari → Compartilhar → Adicionar à Tela de Início.
+- Android: abra no Chrome → menu ⋮ → Instalar aplicativo ou Adicionar à tela inicial. O botão **Instalar app** também oferece o fluxo nativo quando o navegador disponibiliza.
+
+O app requer internet para os dados financeiros. O service worker não usa Cache Storage nem guarda respostas de API, documentos ou tokens. Ao navegar sem conexão, mostra somente uma página genérica sem dados. O SDK Supabase faz requisições com `cache: no-store`; restaurar uma página do histórico volta ao login. O logout por inatividade também confere o tempo decorrido ao retornar de uma aba em segundo plano.
+
+`public/manifest.webmanifest`, `public/icons` e `public/sw.js` compõem a instalação. A versão distribuída continua sendo um app web instalável; não há publicação em App Store ou Play Store.
+
+## Conferir segurança do projeto em produção
+
+A tela de login e o código público não contêm dados financeiros. A restrição dos dados depende das políticas RLS e das duas contas realmente configuradas no Supabase. O administrador do projeto tem privilégios adicionais; sua conta administrativa também precisa ser protegida por MFA.
+
+O arquivo [supabase/security-check.sql](supabase/security-check.sql) executa somente leituras e retorna verificações de configuração e expressões completas das políticas, sem nomes pessoais, UUIDs ou valores financeiros. Execute no SQL Editor e revise os indicadores e as expressões. Os indicadores são uma triagem; não constituem garantia absoluta nem substituem os testes de requisições anon, aal1 e não membros no serviço real. Testes locais e mocks não comprovam a configuração do projeto publicado.

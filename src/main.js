@@ -1,4 +1,6 @@
 import "./style.css";
+import { initializeInstall } from "./install-app.js";
+initializeInstall();
 import { cardsView } from "./cards-ui.js";
 let cardBank = "",
   cardPerson = "";

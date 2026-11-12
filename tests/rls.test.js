@@ -71,6 +71,30 @@ test("RLS exige membro autorizado E segundo fator em leituras e escritas", async
     assert.equal((await db.query("select * from entries")).rows.length, 1);
     await db.exec("delete from debts");
     assert.equal((await db.query("select * from debt_offers")).rows.length, 0);
+    await db.exec("reset role");
+    await db.exec(
+      `create table auth.mfa_factors(user_id uuid,factor_type text,status text);insert into auth.mfa_factors values('${u1}','totp','verified'),('${u2}','totp','verified');`,
+    );
+    const report = await readFile(
+      new URL("../supabase/security-check.sql", import.meta.url),
+      "utf8",
+    );
+    const checks = await db.query(report);
+    assert.equal(checks.rows.length, 8);
+    assert.ok(
+      checks.rows
+        .filter((row) => row.ok !== null)
+        .every((row) => row.ok === true),
+    );
+    await db.exec(
+      "create policy unexpected_access on public.entries for select to authenticated using(true)",
+    );
+    const invalid = await db.query(report);
+    assert.equal(
+      invalid.rows.find((r) => r.verificacao === "somente_politicas_esperadas")
+        .ok,
+      false,
+    );
   } finally {
     await db.close();
   }
