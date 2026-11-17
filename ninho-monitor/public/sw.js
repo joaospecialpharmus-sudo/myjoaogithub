@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ninho-static-v5';
+const CACHE_NAME = 'gegcamera-static-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -10,7 +10,8 @@ const STATIC_ASSETS = [
   '/local-notifications.js',
   '/vendor/qrcode.mjs',
   '/manifest.webmanifest',
-  '/icon.svg'
+  '/icon.svg',
+  '/nursery-room.svg'
 ];
 
 self.addEventListener('install', event => {
@@ -21,7 +22,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => Promise.all(keys
-      .filter(key => key.startsWith('ninho-static-') && key !== CACHE_NAME)
+      .filter(key => (key.startsWith('ninho-static-') || key.startsWith('gegcamera-static-')) && key !== CACHE_NAME)
       .map(key => caches.delete(key))))
   );
   self.clients.claim();

@@ -105,6 +105,10 @@ test('local notifications require secure context and support service-worker or p
     { isSecureContext: true },
     {}
   ), /alertas na página/);
+  assert.match(getLocalNotificationAvailabilityMessage(
+    { isSecureContext: true },
+    { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' }
+  ), /Tela de Início/);
   assert.equal(await requestLocalNotificationPermission(windowObject, navigatorObject), 'granted');
   assert.equal(permissionRequests, 1);
   await showLocalNotification(navigatorObject, 'Movimento observado', 'O monitor percebeu movimento.', 'ninho-movimento');
@@ -329,15 +333,35 @@ test('HTTP serves the app, refreshes the static cache, and never caches ICE conf
   assert.equal(home.headers.get('set-cookie'), null);
   const homeSource = await home.text();
   assert.match(homeSource, /Permitir notificações locais/);
-  assert.match(homeSource, /A permissão do sistema é opcional/);
+  assert.match(homeSource, /GEGCamera/);
+  assert.match(homeSource, /Safari do iPhone/);
+  assert.match(homeSource, /id="theme-toggle"/);
   assert.match(homeSource, /Alerta de choro indisponível/);
   assert.match(homeSource, /Nível de áudio \(não é choro\)/);
+
+  const styles = await fetch(`${baseUrl}/styles.css`, { headers: { Host: `127.0.0.1:${address.port}` } });
+  assert.equal(styles.status, 200);
+  const stylesSource = await styles.text();
+  assert.match(stylesSource, /--color-butter:\s*#ffe9a8/);
+  assert.match(stylesSource, /data-theme="night"/);
+  assert.match(stylesSource, /prefers-reduced-motion:\s*reduce/);
+
+  const manifest = await fetch(`${baseUrl}/manifest.webmanifest`, {
+    headers: { Host: `127.0.0.1:${address.port}` }
+  });
+  assert.equal(manifest.status, 200);
+  assert.equal((await manifest.json()).short_name, 'GEGCamera');
 
   const serviceWorker = await fetch(`${baseUrl}/sw.js`, { headers: { Host: `127.0.0.1:${address.port}` } });
   assert.equal(serviceWorker.status, 200);
   const serviceWorkerSource = await serviceWorker.text();
-  assert.match(serviceWorkerSource, /ninho-static-v5/);
+  assert.match(serviceWorkerSource, /gegcamera-static-v6/);
+  assert.match(serviceWorkerSource, /nursery-room\.svg/);
   assert.match(serviceWorkerSource, /notificationclick/);
+
+  const nursery = await fetch(`${baseUrl}/nursery-room.svg`, { headers: { Host: `127.0.0.1:${address.port}` } });
+  assert.equal(nursery.status, 200);
+  assert.match(nursery.headers.get('content-type'), /image\/svg\+xml/);
 
   const notifications = await fetch(`${baseUrl}/local-notifications.js`, {
     headers: { Host: `127.0.0.1:${address.port}` }

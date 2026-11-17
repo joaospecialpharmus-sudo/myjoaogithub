@@ -28,7 +28,8 @@ const STATIC_FILES = new Set([
   '/vendor/qrcode.mjs',
   '/sw.js',
   '/manifest.webmanifest',
-  '/icon.svg'
+  '/icon.svg',
+  '/nursery-room.svg'
 ]);
 const MIME_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -485,6 +486,6 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   const port = Number(process.env.PORT || '3000');
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT inválida.');
   server.listen(port, '0.0.0.0', () => {
-    console.log(`Ninho Monitor ouvindo na porta ${port}.`);
+    console.log(`GEGCamera ouvindo na porta ${port}.`);
   });
 }

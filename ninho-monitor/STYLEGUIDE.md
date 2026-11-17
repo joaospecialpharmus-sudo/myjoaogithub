@@ -1,61 +1,62 @@
-# Guia visual Ninho
+# Guia visual GEGCamera
 
-Identidade acolhedora e calma para um protótipo de monitoramento entre aparelhos. A interface privilegia leitura clara, controles grandes e aviso explícito de que o produto não substitui supervisão.
+GEGCamera usa o conceito **Janela do quarto**: cartões grandes e arredondados parecem quadros acolhedores sobre uma ilustração original de quarto infantil. A apresentação é deliberadamente calma, inclusive à noite; nenhuma cor ou ilustração reduz os avisos de segurança do protótipo.
 
-## Cores
+## Paleta e contraste
 
-As cores de interface ficam centralizadas em `public/styles.css` como variáveis `--color-*`.
+As cores ficam centralizadas em `public/styles.css` como variáveis CSS. O tema noturno usa tokens alternativos em `:root[data-theme="night"]`.
 
-| Token | Valor | Uso |
+| Token/cor | Dia | Uso |
 |---|---|---|
-| `--color-ink` | `#20343A` | Títulos e texto principal |
-| `--color-muted` | `#4C6267` | Texto secundário em fundos claros |
-| `--color-brand` | `#145C52` | Ações principais, links e estados positivos |
-| `--color-brand-hover` | `#104C45` | Hover da ação principal |
-| `--color-brand-soft` | `#E2EEE8` | Superfícies suaves de câmera |
-| `--color-blue-soft` | `#E8F0F3` | Superfícies suaves de monitor |
-| `--color-peach-soft` | `#F8E9DF` | Destaques acolhedores |
-| `--color-paper` | `#F5F8F5` | Fundo geral |
-| `--color-surface` | `#FFFEFA` | Cartões e campos |
-| `--color-line` | `#D7E2DC` | Bordas |
-| `--color-alert` | `#743B32` | Avisos e erros |
-| `--color-alert-soft` | `#FFF1E9` | Fundo de aviso |
-| `--color-focus` | `#236FD3` | Indicador de foco visível |
+| Amarelo manteiga | `#FFE9A8` | Ilustração e fundos decorativos |
+| `--color-brand` | `#F6C75E` | Ação principal e destaque amarelo-mel |
+| `--color-paper` | `#FFF8E7` | Fundo base creme |
+| `--color-peach-soft` | `#F9D5D3` | Alertas e destaque rosa bebê |
+| `--color-blue-soft` | `#CDE6F5` | Cartão de monitor e ícones |
+| `--color-brand-soft` | `#D4EBDD` | Estados positivos em menta |
+| Lavanda | `#E3DAF2` | Detalhes decorativos |
+| `--color-ink` | `#5B4A3F` | Texto principal |
+| `--color-muted` | `#6D5949` | Texto secundário |
+| `--color-line` | `#D9C9A9` | Bordas |
+| `--color-focus` | `#60428A` | Foco visível |
 
-Combinações principais verificadas para WCAG AA: texto principal sobre papel (aprox. 11:1), texto secundário sobre superfície (aprox. 6:1), texto branco no botão de marca (aprox. 7:1) e texto de alerta sobre fundo de alerta (acima de 8:1). A cor nunca é o único indicador de estado: avisos e controles também têm rótulos textuais.
+O secundário originalmente sugerido (`#8A7867`) não alcança contraste AA no creme; usa-se `#6D5949`. Texto em botões mel usa `#49382D`, mais escuro que o texto padrão. Contrastes sRGB calculados: texto principal/creme **7,95:1**, texto secundário/creme **6,25:1**, texto do botão mel (`#49382D`/`#F6C75E`) **7,02:1**. Foco tem contorno de 3 px além da cor.
+
+No modo noite, o fundo é azul-petróleo `#18343D`, cartões `#24434B`, texto creme `#FFF2DF` e detalhes amarelo quente `#FFE9A8`. Rosa e menta escurecem para superfícies com texto claro; botões mel mantêm texto marrom escuro para contraste.
 
 ## Tipografia
 
-- Títulos: pilha local arredondada `ui-rounded`, Avenir Next Rounded, Arial Rounded MT Bold e Trebuchet MS.
-- Texto corrido e controles: Inter quando instalado, seguido por Segoe UI, Helvetica Neue e Arial.
-- Nenhuma fonte remota é carregada; a pilha de sistema evita requisições adicionais e funciona offline.
-- Texto base 15 px com entrelinha 1.6; títulos usam escala fluida com `clamp()`, e metadados não ficam abaixo de 10–11 px.
+- Títulos: pilha local arredondada `Nunito`, `ui-rounded`, Avenir Next Rounded e Trebuchet MS.
+- Texto corrido e controles: `Nunito Sans`, Segoe UI, Helvetica Neue e Arial.
+- Nenhuma fonte remota é carregada; a pilha do sistema funciona offline.
+- Texto base e descrições têm no mínimo 16 px e entrelinha 1.6; títulos usam escala fluida com `clamp()`.
 
-## Ícones e marca
+## Marca, ícones e ilustração
 
-- Marca do ninho e ícones de câmera, telefone, seta, escudo e aviso usam SVG inline, com traço arredondado e espessura coerente.
-- O favicon/PWA reutiliza `public/icon.svg`; não há pacote de ícones nem imagem externa.
-- SVGs decorativos usam `aria-hidden="true"` e `focusable="false"`; controles continuam com rótulo textual acessível.
+- Logo e favicon mostram lua crescente e estrela originais em amarelo e marrom. Ícones de câmera, telefone, seta, escudo e aviso mantêm SVG e traços arredondados consistentes.
+- O quarto é uma ilustração SVG própria em `public/nursery-room.svg`: papel de parede discreto, móbile, cortina, bichinhos genéricos, prateleira, berço, tapete e luz quente. Sem fonte, imagem ou personagem de terceiros.
+- SVG decorativo é oculto de leitores de tela; controles mantêm rótulos textuais acessíveis.
 
 ## Componentes e interação
 
-- Cartões usam superfície clara, borda suave, raio de 24 px e sombra discreta; controles usam raio de 14 px.
-- Ação principal verde escura com texto branco; secundárias são claras com texto escuro e borda contrastante.
-- Estados de hover e active não alteram a semântica; `:focus-visible` mostra contorno azul de 3 px. Estados desativados continuam legíveis e não são indicados apenas por transparência.
-- Alertas usam fundo pêssego claro, texto escuro, ícone e explicação escrita.
-- Permissões de notificação são solicitadas por um botão explícito; estados de indisponibilidade e o limite do classificador de choro ficam visíveis junto aos controles.
-- Formulários mantêm altura mínima de 48 px e rótulos visíveis.
+- Cartões têm cantos de 26–28 px, borda clara e sombra quente; controles têm cantos de 16–18 px.
+- Ação principal amarelo-mel com texto marrom escuro; secundárias mantêm texto escuro, borda contrastante e estados hover/desativado.
+- Foco de teclado usa contorno de 3 px. Estados não são comunicados só por cor.
+- Alertas podem usar rosa (atenção/indisponível) e menta (estado positivo), sempre com texto. Movimento/áudio e suas limitações continuam explicitados.
+- O botão de tema é acessível, acompanha a preferência do sistema até a pessoa selecionar um modo e atualiza `theme-color` do navegador. A escolha manual vale até recarregar a página.
+- Permissões de notificação continuam atrás de gesto explícito; no iPhone, a aba Safari não garante notificações de sistema. Alertas na página só funcionam durante a sessão ativa.
 
 ## Layout e responsividade
 
-- O layout começa em uma coluna e amplia cartões em duas colunas em telas maiores.
-- Breakpoint móvel em 680 px; espaçamentos e títulos usam escalas fluidas.
-- Vídeos mantêm proporção, cantos arredondados e contraste do placeholder.
-- `prefers-reduced-motion` reduz transições para usuários que pedem movimento reduzido.
-- Não há ilustrações rasterizadas ou dependência de rede; a ilustração da tela inicial é SVG embutido.
+- **A — Janela do quarto (implementado):** cartões câmera/monitor grandes como quadros sobre a cena infantil; cabeçalho com marca e lua.
+- **B — Painel de bercinho (variação documentada, não implementada):** vídeo central em moldura de berço, com áudio, luz e alertas em cartões laterais.
+- **C — Mobile de cartões (variação documentada, não implementada):** cartões pendurados por fios finos sob um móbile superior.
+- O layout começa mobile-first; breakpoints em 680 px e 900 px organizam cartões em colunas. Em telas pequenas, o quarto detalhado é substituído por gradientes e estrelas CSS.
+- `prefers-reduced-motion` remove animações ambientais e transições não essenciais.
+- SVG é leve e local, servido e incluído no cache estático do PWA.
 
 ## Acessibilidade e limites
 
-- Navegação por teclado mantém foco visível; elementos decorativos são ocultados de leitores de tela.
-- Cores textuais e botões principais são selecionados para contraste WCAG AA em fundos declarados; revalidar ao alterar tokens.
-- Não foi criado tema escuro: a tela é voltada a monitoramento e um modo escuro exigiria revisar contraste, percepção dos avisos e vídeo em ambiente noturno separadamente.
+- Navegação por teclado mantém foco visível; elementos decorativos são `aria-hidden`; textos críticos mantêm contraste WCAG AA nos pares documentados.
+- Dia/noite devem ainda ser conferidos em telas reais com brilho reduzido e diferentes modos de contraste.
+- A identidade visual não altera as limitações funcionais: não há classificação de choro, notificações confiáveis em segundo plano ou substituição de supervisão.

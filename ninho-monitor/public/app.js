@@ -904,6 +904,27 @@ $('#motion-threshold').addEventListener('input', () => {
 });
 $('#enable-notifications').addEventListener('click', enableLocalNotifications);
 navigator.mediaDevices?.addEventListener?.('devicechange', refreshDevices);
+
+const themeToggle = $('#theme-toggle');
+const themeColor = document.querySelector('meta[name="theme-color"]');
+let themeChosen = false;
+function applyTheme(theme) {
+  const isNight = theme === 'night';
+  document.documentElement.dataset.theme = isNight ? 'night' : 'day';
+  themeToggle.setAttribute('aria-pressed', String(isNight));
+  themeToggle.setAttribute('aria-label', isNight ? 'Ativar modo dia' : 'Ativar modo noite');
+  themeToggle.querySelector('span').textContent = isNight ? 'Modo dia' : 'Modo noite';
+  themeColor.setAttribute('content', isNight ? '#18343D' : '#FFF8E7');
+}
+applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day');
+themeToggle.addEventListener('click', () => {
+  themeChosen = true;
+  applyTheme(document.documentElement.dataset.theme === 'night' ? 'day' : 'night');
+});
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', event => {
+  if (!themeChosen) applyTheme(event.matches ? 'night' : 'day');
+});
+
 updatePictureInPictureButton();
 refreshNotificationControls();
 window.addEventListener('pagehide', closeSession);

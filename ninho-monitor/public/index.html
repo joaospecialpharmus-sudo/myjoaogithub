@@ -3,32 +3,37 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#f5f8f5">
+    <meta name="theme-color" content="#FFF8E7">
     <meta name="description" content="Protótipo privado para transmitir vídeo entre dois aparelhos com conexão ponto a ponto.">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="Ninho">
+    <meta name="apple-mobile-web-app-title" content="GEGCamera">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
-    <title>Ninho — monitor local</title>
+    <title>GEGCamera — monitor local</title>
   </head>
   <body>
     <main class="shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Ninho, início">
+        <a class="brand" href="/" aria-label="GEGCamera, início">
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 48 48" focusable="false">
-              <path d="M11 28c3.4 5.2 7.8 7.8 13 7.8S33.6 33.2 37 28M14 23c2.8 3.8 6.1 5.7 10 5.7s7.2-1.9 10-5.7" />
-              <path d="M19.2 19.8a5.2 5.2 0 1 1 10.4 0c0 2.4-2.3 4.3-5.2 4.3s-5.2-1.9-5.2-4.3Z" />
-              <path d="M23 18.5c1.7-2.3 4.4-3 7-2" />
+              <path d="M31.8 9.5a15 15 0 1 0 7 20.7A13 13 0 0 1 31.8 9.5Z"/>
+              <path d="m33.4 11.6 1.4 3.2 3.4.3-2.6 2.2.8 3.3-3-1.8-2.9 1.8.8-3.3-2.6-2.2 3.4-.3 1.3-3.2Z"/>
             </svg>
           </span>
-          <span>Ninho <small>monitor local</small></span>
+          <span>GEGCamera <small>monitor local</small></span>
         </a>
-        <span class="secure-pill">
-          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 2.5 16 5v4.4c0 3.7-2.5 6.4-6 8.1-3.5-1.7-6-4.4-6-8.1V5l6-2.5Z"/><path d="m7.3 9.8 1.8 1.8 3.7-4"/></svg>
-          mídia criptografada
-        </span>
+        <div class="header-actions">
+          <span class="secure-pill">
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 2.5 16 5v4.4c0 3.7-2.5 6.4-6 8.1-3.5-1.7-6-4.4-6-8.1V5l6-2.5Z"/><path d="m7.3 9.8 1.8 1.8 3.7-4"/></svg>
+            mídia criptografada
+          </span>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false" aria-label="Ativar modo noite">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.2 15.1A8.6 8.6 0 0 1 8.9 3.8 8.8 8.8 0 1 0 20.2 15.1Z"/><path d="m17.5 3 .8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8.8-1.7Z"/></svg>
+            <span>Modo noite</span>
+          </button>
+        </div>
       </header>
 
       <section id="home-screen" class="screen">
@@ -42,7 +47,7 @@
               <path class="hero-leaf" d="M25 92c9-2 15-8 17-17-9 2-15 8-17 17Zm110 0c-9-2-15-8-17-17 9 2 15 8 17 17Z"/>
             </svg>
           </div>
-          <p class="eyebrow">DOIS APARELHOS · UMA CONEXÃO DIRETA</p>
+          <p class="eyebrow">UM QUARTINHO · DOIS APARELHOS</p>
           <h1>Um jeito simples de ficar por perto.</h1>
           <p class="intro-copy">Use um celular como câmera e outro como monitor. O áudio e o vídeo são enviados diretamente entre os aparelhos, com criptografia WebRTC.</p>
         </div>
@@ -143,7 +148,7 @@
             <video id="remote-video" autoplay playsinline></video>
             <div id="monitor-placeholder" class="monitor-placeholder">Aguardando vídeo da câmera…</div>
             <button id="play-video" class="play-video" type="button" hidden>Toque para iniciar áudio e vídeo</button>
-            <span class="video-label">NINHO · AO VIVO</span>
+            <span class="video-label">GEGCAMERA · AO VIVO</span>
           </div>
           <div class="pip-actions">
             <button id="pip-button" class="secondary-button" type="button" disabled>Abrir em mini janela</button>
@@ -173,7 +178,7 @@
               <p>A análise dos alertas acontece neste aparelho; áudio e vídeo não são enviados a um serviço externo para classificá-los.</p>
             </div>
             <button id="enable-notifications" class="secondary-button notification-permission" type="button">Permitir notificações locais</button>
-            <p id="notification-permission-status" class="fine-print" role="status" aria-live="polite">A permissão do sistema é opcional; o alerta também aparece nesta página.</p>
+            <p id="notification-permission-status" class="fine-print" role="status" aria-live="polite">No Safari do iPhone, notificações do sistema exigem adicionar à Tela de Início (iOS/iPadOS 16.4+); em uma aba comum, os alertas aparecem nesta página enquanto a sessão está ativa.</p>
             <label class="toggle-row"><input id="motion-alert" type="checkbox"> Movimento</label>
             <label class="toggle-row"><input id="volume-alert" type="checkbox"> Nível de áudio (não é choro)</label>
             <label class="threshold-control" for="motion-threshold">Sensibilidade do movimento · <span id="motion-threshold-value">5</span>/10
@@ -192,7 +197,7 @@
       </section>
 
       <footer>
-        <span>Ninho é um protótipo independente e experimental.</span>
+        <span>GEGCamera é um protótipo independente e experimental.</span>
         <span>Não afiliado ao AlfredCamera · sem paridade com recursos pagos.</span>
       </footer>
     </main>

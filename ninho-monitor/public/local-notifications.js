@@ -10,6 +10,10 @@ export function getLocalNotificationAvailabilityMessage(windowObject, navigatorO
     return 'Notificações do sistema exigem uma conexão segura HTTPS.';
   }
   if (typeof windowObject.Notification?.requestPermission !== 'function') {
+    if (/iPad|iPhone|iPod/.test(navigatorObject.userAgent || '')
+      || (navigatorObject.platform === 'MacIntel' && navigatorObject.maxTouchPoints > 1)) {
+      return 'No iPhone/iPad, notificações web exigem adicionar o GEGCamera à Tela de Início (iOS/iPadOS 16.4+). Em uma aba comum do Safari, os alertas aparecem nesta página enquanto ela estiver ativa.';
+    }
     return 'Este modo do navegador não oferece notificações do sistema. Os alertas na página funcionam enquanto ela estiver aberta.';
   }
   if (navigatorObject.serviceWorker?.ready === undefined && typeof windowObject.Notification !== 'function') {

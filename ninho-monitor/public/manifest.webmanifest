@@ -1,12 +1,12 @@
 {
-  "name": "Ninho — monitor local",
-  "short_name": "Ninho",
-  "description": "Protótipo experimental de câmera e monitor entre dois aparelhos.",
+  "name": "GEGCamera — monitor local",
+  "short_name": "GEGCamera",
+  "description": "Monitor local experimental para dois aparelhos.",
   "lang": "pt-BR",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f8f5",
-  "theme_color": "#145c52",
+  "background_color": "#FFF8E7",
+  "theme_color": "#F6C75E",
   "icons": [
     {
       "src": "/icon.svg",
