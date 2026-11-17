@@ -1,0 +1,18 @@
+{
+  "name": "Ninho — monitor local",
+  "short_name": "Ninho",
+  "description": "Protótipo experimental de câmera e monitor entre dois aparelhos.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8f3",
+  "theme_color": "#183c35",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
