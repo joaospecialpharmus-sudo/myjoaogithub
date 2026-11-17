@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#183c35">
+    <meta name="theme-color" content="#f5f8f5">
     <meta name="description" content="Protótipo privado para transmitir vídeo entre dois aparelhos com conexão ponto a ponto.">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Ninho">
@@ -16,41 +16,63 @@
     <main class="shell">
       <header class="topbar">
         <a class="brand" href="/" aria-label="Ninho, início">
-          <span class="brand-mark" aria-hidden="true">n</span>
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 48 48" focusable="false">
+              <path d="M11 28c3.4 5.2 7.8 7.8 13 7.8S33.6 33.2 37 28M14 23c2.8 3.8 6.1 5.7 10 5.7s7.2-1.9 10-5.7" />
+              <path d="M19.2 19.8a5.2 5.2 0 1 1 10.4 0c0 2.4-2.3 4.3-5.2 4.3s-5.2-1.9-5.2-4.3Z" />
+              <path d="M23 18.5c1.7-2.3 4.4-3 7-2" />
+            </svg>
+          </span>
           <span>Ninho <small>monitor local</small></span>
         </a>
-        <span class="secure-pill"><span aria-hidden="true">●</span> mídia criptografada</span>
+        <span class="secure-pill">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 2.5 16 5v4.4c0 3.7-2.5 6.4-6 8.1-3.5-1.7-6-4.4-6-8.1V5l6-2.5Z"/><path d="m7.3 9.8 1.8 1.8 3.7-4"/></svg>
+          mídia criptografada
+        </span>
       </header>
 
       <section id="home-screen" class="screen">
         <div class="intro">
+          <div class="hero-illustration" aria-hidden="true">
+            <svg viewBox="0 0 160 112" focusable="false">
+              <path class="hero-sun" d="M125 14a18 18 0 1 1-36 0 18 18 0 0 1 36 0Z"/>
+              <path class="hero-cloud" d="M31 39c0-9 7-16 16-16 6 0 11 3 14 8 2-1 4-2 7-2 8 0 14 6 14 14H43c-7 0-12-5-12-12Z"/>
+              <path class="hero-nest" d="M36 72c11 12 26 18 44 18s33-6 44-18M46 64c10 9 21 13 34 13s24-4 34-13M57 56c7 5 15 8 23 8s16-3 23-8"/>
+              <path class="hero-heart" d="M80 44c-3-5-11-3-11 3 0 7 11 13 11 13s11-6 11-13c0-6-8-8-11-3Z"/>
+              <path class="hero-leaf" d="M25 92c9-2 15-8 17-17-9 2-15 8-17 17Zm110 0c-9-2-15-8-17-17 9 2 15 8 17 17Z"/>
+            </svg>
+          </div>
           <p class="eyebrow">DOIS APARELHOS · UMA CONEXÃO DIRETA</p>
           <h1>Um jeito simples de ficar por perto.</h1>
           <p class="intro-copy">Use um celular como câmera e outro como monitor. O áudio e o vídeo são enviados diretamente entre os aparelhos, com criptografia WebRTC.</p>
         </div>
         <div class="role-grid">
           <button class="role-card" data-role="camera" type="button">
-            <span class="role-icon camera-icon" aria-hidden="true">◉</span>
+            <span class="role-icon camera-icon" aria-hidden="true">
+              <svg viewBox="0 0 32 32" focusable="false"><path d="M5 10.5h5l2-3h8l2 3h5v14H5z"/><circle cx="16" cy="17.5" r="5"/></svg>
+            </span>
             <span class="role-title">Este aparelho é a câmera</span>
             <span class="role-copy">Compartilhe um código temporário com o outro aparelho.</span>
-            <span class="role-action">Configurar câmera <span aria-hidden="true">→</span></span>
+            <span class="role-action">Configurar câmera <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></span>
           </button>
           <button class="role-card" data-role="monitor" type="button">
-            <span class="role-icon monitor-icon" aria-hidden="true">⌁</span>
+            <span class="role-icon monitor-icon" aria-hidden="true">
+              <svg viewBox="0 0 32 32" focusable="false"><rect x="7.5" y="4.5" width="17" height="23" rx="4"/><path d="M13 8h6m-4.5 15h3"/></svg>
+            </span>
             <span class="role-title">Este aparelho é o monitor</span>
             <span class="role-copy">Digite o código mostrado na tela da câmera.</span>
-            <span class="role-action">Conectar monitor <span aria-hidden="true">→</span></span>
+            <span class="role-action">Conectar monitor <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></span>
           </button>
         </div>
         <p class="privacy-note"><span aria-hidden="true">◇</span> Sem conta, gravação ou nuvem de vídeo. A sinalização e o STUN podem ver dados de conexão, como seu IP; o vídeo não passa pelo servidor de sinalização.</p>
         <aside class="prototype-note">
           <strong>Protótipo experimental</strong>
-          <span>Não classifica choro, não oferece alertas confiáveis em segundo plano e não substitui supervisão. A disponibilidade depende do navegador e da rede.</span>
+          <span>Não detecta choro, não oferece alertas confiáveis em segundo plano e não substitui supervisão. A disponibilidade depende do navegador e da rede.</span>
         </aside>
       </section>
 
       <section id="camera-screen" class="screen" hidden>
-        <button class="back-button" type="button" data-home>← Início</button>
+        <button class="back-button" type="button" data-home><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16 10H5m4 4-4-4 4-4"/></svg> Início</button>
         <div class="screen-heading">
           <p class="eyebrow">APARELHO DA CÂMERA</p>
           <h1>Prepare a câmera</h1>
@@ -60,7 +82,7 @@
           <div class="video-card">
             <video id="local-video" autoplay muted playsinline></video>
             <div class="video-placeholder" id="camera-placeholder">
-              <span aria-hidden="true">◉</span>
+              <span aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M5 10.5h5l2-3h8l2 3h5v14H5z"/><circle cx="16" cy="17.5" r="5"/></svg></span>
               <p>A imagem aparece aqui quando a câmera iniciar.</p>
             </div>
             <span class="live-badge" id="camera-live" hidden><span></span> câmera local</span>
@@ -98,7 +120,7 @@
       </section>
 
       <section id="monitor-screen" class="screen" hidden>
-        <button class="back-button" type="button" data-home>← Início</button>
+        <button class="back-button" type="button" data-home><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16 10H5m4 4-4-4 4-4"/></svg> Início</button>
         <div class="screen-heading">
           <p class="eyebrow">APARELHO DO MONITOR</p>
           <h1>Conecte-se à câmera</h1>
@@ -156,7 +178,7 @@
               <input id="volume-threshold" type="range" min="2" max="30" value="10">
             </label>
             <p id="alert-status" class="alert-status" aria-live="polite">Alertas desligados.</p>
-            <p class="warning-copy"><strong>Importante:</strong> volume não detecta choro. Este protótipo não classifica choro; o alerta de volume pode falhar e não é confiável em segundo plano. Estes alertas experimentais não substituem supervisão.</p>
+            <p class="warning-copy"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 2.5 18 17H2L10 2.5Z"/><path d="M10 7v4m0 2.5v.1"/></svg><span><strong>Importante:</strong> volume não detecta choro. Este protótipo não detecta choro; o alerta de volume pode falhar e não é confiável em segundo plano. Estes alertas experimentais não substituem supervisão.</span></p>
           </div>
         </div>
         <div class="notice-strip">O acesso à câmera e ao microfone exige HTTPS (ou localhost). A imagem pode não conectar em algumas redes, mesmo com sinalização funcionando.</div>

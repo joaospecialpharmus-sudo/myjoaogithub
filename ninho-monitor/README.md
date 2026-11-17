@@ -101,5 +101,6 @@ Antes de chamar algo de “detecção”, validar com gravações consentidas e 
 - `server.js`: servidor HTTP/WebSocket, pareamento, validação e emissão de configuração ICE.
 - `GET /healthz`: verificação simples de disponibilidade do servidor.
 - `public/`: aplicação, service worker e manifesto PWA.
+- `STYLEGUIDE.md`: paleta, tipografia, componentes, responsividade e acessibilidade visual.
 - `Dockerfile`, `docker-compose.yml`, `Caddyfile`: deploy HTTPS opcional.
 - `.env.example`: nomes de variáveis sem credenciais operacionais.
