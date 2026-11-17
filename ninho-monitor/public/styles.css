@@ -467,11 +467,14 @@ input[type="checkbox"], input[type="range"] { accent-color: var(--color-brand); 
 .control-grid input[type="range"], .threshold-control input { width: 100%; accent-color: var(--color-brand); }
 .alert-card > div > p, .warning-copy { color: var(--color-muted); font-size: 12px; line-height: 1.6; }
 .alert-card > div > p { margin: -7px 0 16px; }
+.notification-permission { margin: 0 0 4px; }
+#notification-permission-status { margin: 4px 0 14px; }
 .toggle-row { display: inline-flex; margin: 0 16px 12px 0; align-items: center; gap: 8px; }
 .toggle-row input { width: 18px; height: 18px; }
 .threshold-control { max-width: 340px; margin-top: 5px; }
 .threshold-control input { display: block; margin-top: 8px; }
 .alert-status { color: var(--color-brand); font-size: 13px; font-weight: 700; }
+.cry-alert-unavailable { margin: 12px 0 0; padding: 11px 13px; border: 1px solid #e9cbb9; border-radius: var(--radius-small); background: var(--color-alert-soft); color: #59332d; font-size: 12px; line-height: 1.55; }
 .warning-copy {
   display: flex;
   margin-bottom: 0;

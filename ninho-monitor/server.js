@@ -24,6 +24,7 @@ const STATIC_FILES = new Set([
   '/pairing.js',
   '/signal-inbox.js',
   '/picture-in-picture.js',
+  '/local-notifications.js',
   '/vendor/qrcode.mjs',
   '/sw.js',
   '/manifest.webmanifest',

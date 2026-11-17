@@ -169,16 +169,22 @@
           </div>
           <div class="alert-card">
             <div>
-              <h2>Alertas experimentais locais</h2>
-              <p>O processamento acontece neste aparelho e não envia imagens ou áudio ao servidor.</p>
+              <h2>Alertas locais experimentais</h2>
+              <p>A análise dos alertas acontece neste aparelho; áudio e vídeo não são enviados a um serviço externo para classificá-los.</p>
             </div>
-            <label class="toggle-row"><input id="motion-alert" type="checkbox"> Movimento</label>
-            <label class="toggle-row"><input id="volume-alert" type="checkbox"> Volume</label>
-            <label class="threshold-control" for="volume-threshold">Sensibilidade do volume
+            <button id="enable-notifications" class="secondary-button notification-permission" type="button">Permitir notificações locais</button>
+            <p id="notification-permission-status" class="fine-print" role="status" aria-live="polite"></p>
+            <label class="toggle-row"><input id="motion-alert" type="checkbox" disabled> Movimento</label>
+            <label class="toggle-row"><input id="volume-alert" type="checkbox" disabled> Nível de áudio (não é choro)</label>
+            <label class="threshold-control" for="motion-threshold">Sensibilidade do movimento · <span id="motion-threshold-value">5</span>/10
+              <input id="motion-threshold" type="range" min="1" max="10" value="5" disabled>
+            </label>
+            <label class="threshold-control" for="volume-threshold">Limite do nível de áudio
               <input id="volume-threshold" type="range" min="2" max="30" value="10">
             </label>
             <p id="alert-status" class="alert-status" aria-live="polite">Alertas desligados.</p>
-            <p class="warning-copy"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 2.5 18 17H2L10 2.5Z"/><path d="M10 7v4m0 2.5v.1"/></svg><span><strong>Importante:</strong> volume não detecta choro. Este protótipo não detecta choro; o alerta de volume pode falhar e não é confiável em segundo plano. Estes alertas experimentais não substituem supervisão.</span></p>
+            <p class="cry-alert-unavailable"><strong>Alerta de choro indisponível:</strong> esta versão não inclui um classificador. O alerta de nível de áudio não distingue choro de outros sons.</p>
+            <p class="warning-copy"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 2.5 18 17H2L10 2.5Z"/><path d="M10 7v4m0 2.5v.1"/></svg><span><strong>Importante:</strong> notificações locais não são Web Push. Elas só podem ser geradas enquanto a sessão e a página estiverem executando; o navegador pode suspender vídeo, áudio e análise em segundo plano. Não substituem supervisão.</span></p>
           </div>
         </div>
         <div class="notice-strip">O acesso à câmera e ao microfone exige HTTPS (ou localhost). A imagem pode não conectar em algumas redes, mesmo com sinalização funcionando.</div>

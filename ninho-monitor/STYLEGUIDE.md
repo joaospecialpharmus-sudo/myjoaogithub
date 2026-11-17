@@ -43,6 +43,7 @@ Combinações principais verificadas para WCAG AA: texto principal sobre papel (
 - Ação principal verde escura com texto branco; secundárias são claras com texto escuro e borda contrastante.
 - Estados de hover e active não alteram a semântica; `:focus-visible` mostra contorno azul de 3 px. Estados desativados continuam legíveis e não são indicados apenas por transparência.
 - Alertas usam fundo pêssego claro, texto escuro, ícone e explicação escrita.
+- Permissões de notificação são solicitadas por um botão explícito; estados de indisponibilidade e o limite do classificador de choro ficam visíveis junto aos controles.
 - Formulários mantêm altura mínima de 48 px e rótulos visíveis.
 
 ## Layout e responsividade

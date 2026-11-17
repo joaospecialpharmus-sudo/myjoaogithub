@@ -7,6 +7,12 @@ import qrcode from 'qrcode-generator';
 import { createPairingUrl, readPairingCodeFromFragment } from '../public/pairing.js';
 import { isPictureInPictureActive, supportsPictureInPicture, togglePictureInPicture } from '../public/picture-in-picture.js';
 import { createSignalInbox } from '../public/signal-inbox.js';
+import {
+  canUseLocalNotifications,
+  motionThresholdForSensitivity,
+  requestLocalNotificationPermission,
+  showLocalNotification
+} from '../public/local-notifications.js';
 
 const app = createNinhoServer({
   env: {
@@ -64,6 +70,55 @@ test('Picture-in-Picture detects standard and WebKit video APIs and reports unsu
 
   assert.equal(supportsPictureInPicture({}, {}), false);
   await assert.rejects(() => togglePictureInPicture({}, {}), /não oferece mini janela/);
+});
+
+test('local notifications require secure context, user permission, and a service worker registration', async () => {
+  let permissionRequests = 0;
+  const windowObject = {
+    isSecureContext: true,
+    Notification: {
+      permission: 'default',
+      async requestPermission() {
+        permissionRequests += 1;
+        this.permission = 'granted';
+        return this.permission;
+      }
+    }
+  };
+  const calls = [];
+  const navigatorObject = {
+    serviceWorker: {
+      ready: Promise.resolve({
+        async showNotification(title, options) {
+          calls.push({ title, options });
+        }
+      })
+    }
+  };
+
+  assert.equal(canUseLocalNotifications(windowObject, navigatorObject), true);
+  assert.equal(canUseLocalNotifications({ ...windowObject, isSecureContext: false }, navigatorObject), false);
+  assert.equal(canUseLocalNotifications(windowObject, {}), false);
+  assert.equal(await requestLocalNotificationPermission(windowObject, navigatorObject), 'granted');
+  assert.equal(permissionRequests, 1);
+  await showLocalNotification(navigatorObject, 'Movimento observado', 'O monitor percebeu movimento.', 'ninho-movimento');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].options.tag, 'ninho-movimento');
+  assert.equal(calls[0].options.data.url, '/');
+
+  await assert.rejects(() => requestLocalNotificationPermission(
+    { ...windowObject, isSecureContext: false },
+    navigatorObject
+  ), /contexto/);
+  await assert.rejects(() => showLocalNotification({ serviceWorker: { ready: Promise.resolve({}) } }, 'Alerta', 'Teste', 'test'), /service worker/);
+});
+
+test('motion sensitivity lowers the detection threshold and clamps to the supported range', () => {
+  assert.equal(motionThresholdForSensitivity(1), 22);
+  assert.equal(motionThresholdForSensitivity(10), 4);
+  assert.equal(motionThresholdForSensitivity(0), motionThresholdForSensitivity(1));
+  assert.equal(motionThresholdForSensitivity(11), motionThresholdForSensitivity(10));
+  assert.throws(() => motionThresholdForSensitivity('invalid'), /numérica/);
 });
 
 after(() => app.close());
@@ -231,10 +286,22 @@ test('HTTP serves the app, refreshes the static cache, and never caches ICE conf
   assert.match(home.headers.get('content-type'), /text\/html/);
   assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(home.headers.get('set-cookie'), null);
+  const homeSource = await home.text();
+  assert.match(homeSource, /Permitir notificações locais/);
+  assert.match(homeSource, /Alerta de choro indisponível/);
+  assert.match(homeSource, /Nível de áudio \(não é choro\)/);
 
   const serviceWorker = await fetch(`${baseUrl}/sw.js`, { headers: { Host: `127.0.0.1:${address.port}` } });
   assert.equal(serviceWorker.status, 200);
-  assert.match(await serviceWorker.text(), /ninho-static-v3/);
+  const serviceWorkerSource = await serviceWorker.text();
+  assert.match(serviceWorkerSource, /ninho-static-v4/);
+  assert.match(serviceWorkerSource, /notificationclick/);
+
+  const notifications = await fetch(`${baseUrl}/local-notifications.js`, {
+    headers: { Host: `127.0.0.1:${address.port}` }
+  });
+  assert.equal(notifications.status, 200);
+  assert.match(await notifications.text(), /showNotification/);
 
   const health = await fetch(`${baseUrl}/healthz`, { headers: { Host: `127.0.0.1:${address.port}` } });
   assert.equal(health.status, 200);

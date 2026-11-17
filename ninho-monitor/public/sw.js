@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ninho-static-v3';
+const CACHE_NAME = 'ninho-static-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -7,6 +7,7 @@ const STATIC_ASSETS = [
   '/pairing.js',
   '/signal-inbox.js',
   '/picture-in-picture.js',
+  '/local-notifications.js',
   '/vendor/qrcode.mjs',
   '/manifest.webmanifest',
   '/icon.svg'
@@ -33,4 +34,15 @@ self.addEventListener('fetch', event => {
   if (url.pathname === '/signal' || url.pathname.startsWith('/api/')) return;
   if (!STATIC_ASSETS.includes(url.pathname)) return;
   event.respondWith(caches.match(request).then(cached => cached || fetch(request)));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows) {
+      if ('focus' in client) return client.focus();
+    }
+    return self.clients.openWindow('/');
+  })());
 });

@@ -1,6 +1,12 @@
 import qrcode from './vendor/qrcode.mjs';
 import { createPairingUrl, readPairingCodeFromFragment } from './pairing.js';
 import { isPictureInPictureActive, supportsPictureInPicture, togglePictureInPicture } from './picture-in-picture.js';
+import {
+  canUseLocalNotifications,
+  motionThresholdForSensitivity,
+  requestLocalNotificationPermission,
+  showLocalNotification
+} from './local-notifications.js';
 import { createSignalInbox } from './signal-inbox.js';
 
 const $ = selector => document.querySelector(selector);
@@ -31,7 +37,7 @@ let analysisSource;
 let analysisContext;
 let iceConfiguration;
 let previousFrame;
-let lastAlertAt = 0;
+const lastAlertAt = new Map();
 let pendingIceCandidates = [];
 let pairingUrl;
 let peerConnectTimer;
@@ -100,6 +106,8 @@ function reportError(message) {
 function closeSession() {
   clearInterval(pairTimer);
   clearTimeout(peerConnectTimer);
+  stopLocalAlerts();
+  lastAlertAt.clear();
   clearTimeout(motionTimer);
   cancelAnimationFrame(volumeFrame);
   motionTimer = undefined;
@@ -134,6 +142,9 @@ function closeSession() {
   $('#camera-live').hidden = true;
   $('#monitor-placeholder').hidden = false;
   $('#play-video').hidden = true;
+  $('#motion-alert').checked = false;
+  $('#volume-alert').checked = false;
+  $('#alert-status').textContent = 'Alertas desligados.';
   $('#connection-badge').innerHTML = '<span></span> Conectando';
   for (const control of [$('#switch-camera'), $('#mute-camera'), $('#resolution-select'), $('#zoom-range'), $('#torch-button')]) {
     control.disabled = true;
@@ -619,9 +630,7 @@ async function flushPendingIceCandidates() {
 }
 
 function startLocalAlerts() {
-  stopLocalAlerts();
-  if ($('#motion-alert').checked) startMotionAnalysis();
-  if ($('#volume-alert').checked) startVolumeAnalysis();
+  updateAlertMonitoring();
 }
 
 function stopLocalAlerts() {
@@ -638,10 +647,31 @@ function stopLocalAlerts() {
 
 function triggerLocalAlert(kind) {
   const now = Date.now();
-  if (now - lastAlertAt < 5000) return;
-  lastAlertAt = now;
-  $('#alert-status').textContent = `Atividade de ${kind} percebida neste aparelho.`;
+  if (now - (lastAlertAt.get(kind) || 0) < 30000) return;
+  lastAlertAt.set(kind, now);
+  const statusMessages = {
+    movimento: 'Movimento percebido neste aparelho.',
+    'nível de áudio': 'Nível de áudio acima do limite neste aparelho.'
+  };
+  const notificationBodies = {
+    movimento: 'Foi observada mudança de imagem acima da sensibilidade escolhida.',
+    'nível de áudio': 'O nível de áudio ultrapassou o limite escolhido; isso não identifica choro.'
+  };
+  $('#alert-status').textContent = statusMessages[kind] || 'Alerta local neste aparelho.';
   if ('vibrate' in navigator) navigator.vibrate(150);
+  const titles = {
+    movimento: 'Movimento observado',
+    'nível de áudio': 'Nível de áudio elevado'
+  };
+  void showLocalNotification(
+    navigator,
+    titles[kind] || 'Alerta local',
+    notificationBodies[kind] || 'Uma condição observada atingiu o limite configurado.',
+    `ninho-${kind}`
+  )
+    .catch(() => {
+      $('#alert-status').textContent = 'A análise continua ativa, mas o navegador não conseguiu mostrar a notificação local.';
+    });
 }
 
 function startMotionAnalysis() {
@@ -666,7 +696,8 @@ function startMotionAnalysis() {
       if (previousFrame) {
         let diff = 0;
         for (let i = 0; i < frame.length; i += 1) diff += Math.abs(frame[i] - previousFrame[i]);
-        if (diff / frame.length > 10) triggerLocalAlert('movimento');
+        const threshold = motionThresholdForSensitivity($('#motion-threshold').value);
+        if (diff / frame.length > threshold) triggerLocalAlert('movimento');
       }
       previousFrame = frame;
     }
@@ -698,7 +729,7 @@ async function startVolumeAnalysis() {
         sum += normalized * normalized;
       }
       const rms = Math.sqrt(sum / data.length) * 100;
-      if (rms > Number($('#volume-threshold').value)) triggerLocalAlert('volume');
+      if (rms > Number($('#volume-threshold').value)) triggerLocalAlert('nível de áudio');
       volumeFrame = requestAnimationFrame(inspect);
     };
     inspect();
@@ -711,9 +742,58 @@ function updateAlertMonitoring() {
   stopLocalAlerts();
   const motion = $('#motion-alert').checked;
   const volume = $('#volume-alert').checked;
+  if (window.Notification?.permission !== 'granted') {
+    $('#alert-status').textContent = motion || volume
+      ? 'Para receber alertas, permita notificações neste aparelho primeiro.'
+      : 'Alertas desligados.';
+    return;
+  }
   if (motion && remoteVideo.srcObject) startMotionAnalysis();
   if (volume && remoteVideo.srcObject) startVolumeAnalysis();
-  $('#alert-status').textContent = motion || volume ? 'Análise experimental ativa apenas enquanto esta tela estiver aberta.' : 'Alertas desligados.';
+  $('#alert-status').textContent = motion || volume
+    ? 'Análise e notificações locais ativas enquanto esta sessão e página estiverem executando.'
+    : 'Alertas desligados.';
+}
+
+function refreshNotificationControls() {
+  const button = $('#enable-notifications');
+  const status = $('#notification-permission-status');
+  const available = canUseLocalNotifications(window, navigator);
+  const permission = window.Notification?.permission;
+  const allowed = available && permission === 'granted';
+  $('#motion-alert').disabled = !allowed;
+  $('#volume-alert').disabled = !allowed;
+  $('#motion-threshold').disabled = !allowed;
+  $('#volume-threshold').disabled = !allowed;
+  button.disabled = !available || permission !== 'default';
+  if (!available) {
+    button.textContent = 'Notificações indisponíveis';
+    status.textContent = 'Este navegador não oferece notificações locais por service worker neste contexto.';
+  } else if (permission === 'granted') {
+    button.textContent = 'Notificações permitidas';
+    status.textContent = 'Permissão ativa neste aparelho. No iPhone, use o Ninho instalado na Tela de Início quando necessário.';
+  } else if (permission === 'denied') {
+    button.textContent = 'Permissão bloqueada';
+    status.textContent = 'Permita notificações nas configurações do navegador ou do app instalado.';
+  } else {
+    button.textContent = 'Permitir notificações locais';
+    status.textContent = 'A permissão será solicitada somente quando você tocar no botão.';
+  }
+}
+
+async function enableLocalNotifications() {
+  const button = $('#enable-notifications');
+  button.disabled = true;
+  try {
+    await requestLocalNotificationPermission(window, navigator);
+    refreshNotificationControls();
+    if (window.Notification.permission === 'granted') {
+      $('#alert-status').textContent = 'Permissão concedida. Escolha os alertas que deseja ativar.';
+    }
+  } catch (error) {
+    $('#notification-permission-status').textContent = error.message || 'Não foi possível solicitar notificações neste navegador.';
+    button.disabled = false;
+  }
 }
 
 function renderPairingQr(url) {
@@ -823,8 +903,13 @@ $('#torch-button').addEventListener('click', () => {
 $('#motion-alert').addEventListener('change', updateAlertMonitoring);
 $('#volume-alert').addEventListener('change', updateAlertMonitoring);
 $('#volume-threshold').addEventListener('input', updateAlertMonitoring);
+$('#motion-threshold').addEventListener('input', () => {
+  $('#motion-threshold-value').textContent = $('#motion-threshold').value;
+});
+$('#enable-notifications').addEventListener('click', enableLocalNotifications);
 navigator.mediaDevices?.addEventListener?.('devicechange', refreshDevices);
 updatePictureInPictureButton();
+refreshNotificationControls();
 window.addEventListener('pagehide', closeSession);
 window.addEventListener('hashchange', consumePairingFragment);
 consumePairingFragment();
