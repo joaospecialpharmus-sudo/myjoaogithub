@@ -1,0 +1,18 @@
+{
+  "name": "GEGCamera — monitor local",
+  "short_name": "GEGCamera",
+  "description": "Monitor local experimental para dois aparelhos.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFF8E7",
+  "theme_color": "#F6C75E",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

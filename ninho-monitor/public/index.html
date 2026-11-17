@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#FFF8E7">
+    <meta name="description" content="Protótipo privado para transmitir vídeo entre dois aparelhos com conexão ponto a ponto.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="GEGCamera">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <title>GEGCamera — monitor local</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="GEGCamera, início">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 48 48" focusable="false">
+              <path d="M31.8 9.5a15 15 0 1 0 7 20.7A13 13 0 0 1 31.8 9.5Z"/>
+              <path d="m33.4 11.6 1.4 3.2 3.4.3-2.6 2.2.8 3.3-3-1.8-2.9 1.8.8-3.3-2.6-2.2 3.4-.3 1.3-3.2Z"/>
+            </svg>
+          </span>
+          <span>GEGCamera <small>monitor local</small></span>
+        </a>
+        <div class="header-actions">
+          <span class="secure-pill">
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 2.5 16 5v4.4c0 3.7-2.5 6.4-6 8.1-3.5-1.7-6-4.4-6-8.1V5l6-2.5Z"/><path d="m7.3 9.8 1.8 1.8 3.7-4"/></svg>
+            mídia criptografada
+          </span>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false" aria-label="Ativar modo noite">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.2 15.1A8.6 8.6 0 0 1 8.9 3.8 8.8 8.8 0 1 0 20.2 15.1Z"/><path d="m17.5 3 .8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8.8-1.7Z"/></svg>
+            <span>Modo noite</span>
+          </button>
+        </div>
+      </header>
+
+      <section id="home-screen" class="screen">
+        <div class="intro">
+          <div class="hero-illustration" aria-hidden="true">
+            <svg viewBox="0 0 160 112" focusable="false">
+              <path class="hero-sun" d="M125 14a18 18 0 1 1-36 0 18 18 0 0 1 36 0Z"/>
+              <path class="hero-cloud" d="M31 39c0-9 7-16 16-16 6 0 11 3 14 8 2-1 4-2 7-2 8 0 14 6 14 14H43c-7 0-12-5-12-12Z"/>
+              <path class="hero-nest" d="M36 72c11 12 26 18 44 18s33-6 44-18M46 64c10 9 21 13 34 13s24-4 34-13M57 56c7 5 15 8 23 8s16-3 23-8"/>
+              <path class="hero-heart" d="M80 44c-3-5-11-3-11 3 0 7 11 13 11 13s11-6 11-13c0-6-8-8-11-3Z"/>
+              <path class="hero-leaf" d="M25 92c9-2 15-8 17-17-9 2-15 8-17 17Zm110 0c-9-2-15-8-17-17 9 2 15 8 17 17Z"/>
+            </svg>
+          </div>
+          <p class="eyebrow">UM QUARTINHO · DOIS APARELHOS</p>
+          <h1>Um jeito simples de ficar por perto.</h1>
+          <p class="intro-copy">Use um celular como câmera e outro como monitor. O áudio e o vídeo são enviados diretamente entre os aparelhos, com criptografia WebRTC.</p>
+        </div>
+        <div class="role-grid">
+          <button class="role-card" data-role="camera" type="button">
+            <span class="role-icon camera-icon" aria-hidden="true">
+              <svg viewBox="0 0 32 32" focusable="false"><path d="M5 10.5h5l2-3h8l2 3h5v14H5z"/><circle cx="16" cy="17.5" r="5"/></svg>
+            </span>
+            <span class="role-title">Este aparelho é a câmera</span>
+            <span class="role-copy">Compartilhe um código temporário com o outro aparelho.</span>
+            <span class="role-action">Configurar câmera <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></span>
+          </button>
+          <button class="role-card" data-role="monitor" type="button">
+            <span class="role-icon monitor-icon" aria-hidden="true">
+              <svg viewBox="0 0 32 32" focusable="false"><rect x="7.5" y="4.5" width="17" height="23" rx="4"/><path d="M13 8h6m-4.5 15h3"/></svg>
+            </span>
+            <span class="role-title">Este aparelho é o monitor</span>
+            <span class="role-copy">Digite o código mostrado na tela da câmera.</span>
+            <span class="role-action">Conectar monitor <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></span>
+          </button>
+        </div>
+        <p class="privacy-note"><span aria-hidden="true">◇</span> Sem conta, gravação ou nuvem de vídeo. A sinalização e o STUN podem ver dados de conexão, como seu IP; o vídeo não passa pelo servidor de sinalização.</p>
+        <aside class="prototype-note">
+          <strong>Protótipo experimental</strong>
+          <span>Não detecta choro, não oferece alertas confiáveis em segundo plano e não substitui supervisão. A disponibilidade depende do navegador e da rede.</span>
+        </aside>
+      </section>
+
+      <section id="camera-screen" class="screen" hidden>
+        <button class="back-button" type="button" data-home><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16 10H5m4 4-4-4 4-4"/></svg> Início</button>
+        <div class="screen-heading">
+          <p class="eyebrow">APARELHO DA CÂMERA</p>
+          <h1>Prepare a câmera</h1>
+          <p>Deixe este aparelho conectado à energia e com o navegador aberto.</p>
+        </div>
+        <div class="camera-layout">
+          <div class="video-card">
+            <video id="local-video" autoplay muted playsinline></video>
+            <div class="video-placeholder" id="camera-placeholder">
+              <span aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M5 10.5h5l2-3h8l2 3h5v14H5z"/><circle cx="16" cy="17.5" r="5"/></svg></span>
+              <p>A imagem aparece aqui quando a câmera iniciar.</p>
+            </div>
+            <span class="live-badge" id="camera-live" hidden><span></span> câmera local</span>
+          </div>
+          <div class="setup-card">
+            <h2>Dispositivos</h2>
+            <label for="camera-select">Câmera</label>
+            <select id="camera-select"><option value="">Câmera padrão</option></select>
+            <label for="microphone-select">Microfone</label>
+            <select id="microphone-select"><option value="">Microfone padrão</option></select>
+            <button id="start-camera" class="primary-button" type="button">Iniciar câmera e criar código</button>
+            <p class="fine-print">O navegador pedirá acesso à câmera e ao microfone. Os dispositivos só são capturados depois do seu consentimento.</p>
+          </div>
+        </div>
+        <div id="pairing-card" class="pairing-card" hidden>
+          <div>
+            <p class="eyebrow">CÓDIGO DE USO ÚNICO · EXPIRA EM 2 MIN</p>
+            <p id="pairing-code" class="pairing-code" aria-live="polite"></p>
+            <p id="pairing-status" class="status-text">Aguardando o monitor conectar…</p>
+          </div>
+          <div class="pairing-share">
+            <div class="pairing-qr-wrap">
+              <canvas id="pairing-qr" width="220" height="220" aria-label="QR Code com o link temporário para parear"></canvas>
+              <p>Escaneie com a câmera do celular do monitor. O QR é gerado neste aparelho; o código fica no fragmento do link, que não é enviado na requisição ao servidor.</p>
+            </div>
+            <div class="pairing-actions">
+              <button id="copy-link" class="secondary-button" type="button">Copiar link de pareamento</button>
+              <button id="copy-code" class="secondary-button" type="button">Copiar código manual</button>
+            </div>
+          </div>
+          <p class="pairing-warning"><strong>Link e QR são acesso temporário:</strong> qualquer pessoa que obtenha o link pode tentar resgatar o código primeiro. Compartilhe apenas com o monitor pretendido.</p>
+        </div>
+        <div class="local-status" id="camera-status" role="status" aria-live="polite"></div>
+        <div class="notice-strip"><strong>Privacidade:</strong> o vídeo não passa pelo servidor de sinalização. A conexão pode usar um serviço TURN configurado pelo administrador apenas para encaminhar pacotes criptografados quando a rede não permitir conexão direta.</div>
+      </section>
+
+      <section id="monitor-screen" class="screen" hidden>
+        <button class="back-button" type="button" data-home><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16 10H5m4 4-4-4 4-4"/></svg> Início</button>
+        <div class="screen-heading">
+          <p class="eyebrow">APARELHO DO MONITOR</p>
+          <h1>Conecte-se à câmera</h1>
+          <p>Digite o código de uso único mostrado no outro aparelho.</p>
+        </div>
+        <form id="join-form" class="join-card">
+          <label for="pairing-input">Código de pareamento</label>
+          <input id="pairing-input" name="code" type="text" inputmode="text" autocomplete="one-time-code" maxlength="32" pattern="[A-Za-z0-9_-]{32}" placeholder="32 caracteres" required>
+          <button id="join-button" class="primary-button" type="submit">Conectar</button>
+          <p id="monitor-status" class="status-text" role="status" aria-live="polite">A conexão usa WebRTC com criptografia ponto a ponto.</p>
+        </form>
+
+        <div id="monitor-session" class="monitor-session" hidden>
+          <div class="monitor-topline">
+            <span class="connection-badge" id="connection-badge"><span></span> Conectando</span>
+            <button id="end-session" class="text-button" type="button">Encerrar conexão</button>
+          </div>
+          <p id="connection-detail" class="connection-detail" role="status" aria-live="polite">Aguardando a negociação de mídia…</p>
+          <div class="monitor-video-wrap">
+            <video id="remote-video" autoplay playsinline></video>
+            <div id="monitor-placeholder" class="monitor-placeholder">Aguardando vídeo da câmera…</div>
+            <button id="play-video" class="play-video" type="button" hidden>Toque para iniciar áudio e vídeo</button>
+            <span class="video-label">GEGCAMERA · AO VIVO</span>
+          </div>
+          <div class="pip-actions">
+            <button id="pip-button" class="secondary-button" type="button" disabled>Abrir em mini janela</button>
+            <p id="pip-status" class="fine-print" role="status" aria-live="polite">A mini janela ficará disponível quando houver vídeo e o navegador oferecer suporte.</p>
+          </div>
+          <div class="control-card">
+            <h2>Controles remotos</h2>
+            <div class="control-grid">
+              <button id="switch-camera" class="secondary-button" type="button" disabled>Trocar câmera</button>
+              <button id="mute-camera" class="secondary-button" type="button" disabled>Silenciar microfone</button>
+              <label for="resolution-select">Resolução desejada
+                <select id="resolution-select" disabled>
+                  <option value="360">Economia · 360p</option>
+                  <option value="720" selected>Equilibrada · 720p</option>
+                  <option value="1080">Alta · 1080p</option>
+                </select>
+              </label>
+              <label id="zoom-control" for="zoom-range" hidden>Zoom <span id="zoom-value">1×</span>
+                <input id="zoom-range" type="range" min="1" max="1" step="0.1" value="1" disabled>
+              </label>
+              <button id="torch-button" class="secondary-button" type="button" disabled hidden>Ligar flash</button>
+            </div>
+          </div>
+          <div class="alert-card">
+            <div>
+              <h2>Alertas locais experimentais</h2>
+              <p>A análise dos alertas acontece neste aparelho; áudio e vídeo não são enviados a um serviço externo para classificá-los.</p>
+            </div>
+            <button id="enable-notifications" class="secondary-button notification-permission" type="button">Permitir notificações locais</button>
+            <p id="notification-permission-status" class="fine-print" role="status" aria-live="polite">No Safari do iPhone, notificações do sistema exigem adicionar à Tela de Início (iOS/iPadOS 16.4+); em uma aba comum, os alertas aparecem nesta página enquanto a sessão está ativa.</p>
+            <label class="toggle-row"><input id="motion-alert" type="checkbox"> Movimento</label>
+            <label class="toggle-row"><input id="volume-alert" type="checkbox"> Nível de áudio (não é choro)</label>
+            <label class="threshold-control" for="motion-threshold">Sensibilidade do movimento · <span id="motion-threshold-value">5</span>/10
+              <input id="motion-threshold" type="range" min="1" max="10" value="5">
+            </label>
+            <label class="threshold-control" for="volume-threshold">Limite do nível de áudio
+              <input id="volume-threshold" type="range" min="2" max="30" value="10">
+            </label>
+            <p id="alert-status" class="alert-status" aria-live="polite">Alertas desligados.</p>
+            <p id="alert-event-status" class="alert-event-status" role="status" aria-live="assertive"></p>
+            <p class="cry-alert-unavailable"><strong>Alerta de choro indisponível:</strong> esta versão não inclui um classificador. O alerta de nível de áudio não distingue choro de outros sons.</p>
+            <p class="warning-copy"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 2.5 18 17H2L10 2.5Z"/><path d="M10 7v4m0 2.5v.1"/></svg><span><strong>Importante:</strong> notificações locais não são Web Push. Elas só podem ser geradas enquanto a sessão e a página estiverem executando; o navegador pode suspender vídeo, áudio e análise em segundo plano. Não substituem supervisão.</span></p>
+          </div>
+        </div>
+        <div class="notice-strip">O acesso à câmera e ao microfone exige HTTPS (ou localhost). A imagem pode não conectar em algumas redes, mesmo com sinalização funcionando.</div>
+      </section>
+
+      <footer>
+        <span>GEGCamera é um protótipo independente e experimental.</span>
+        <span>Não afiliado ao AlfredCamera · sem paridade com recursos pagos.</span>
+      </footer>
+    </main>
+    <canvas id="analysis-canvas" hidden></canvas>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
