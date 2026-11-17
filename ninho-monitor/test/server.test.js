@@ -224,13 +224,17 @@ test('WebSocket upgrade rejects a cross-origin browser request', async () => {
   assert.equal(status, 403);
 });
 
-test('HTTP serves the app at root and ICE configuration is never cacheable', async () => {
+test('HTTP serves the app, refreshes the static cache, and never caches ICE configuration', async () => {
   const baseUrl = `http://127.0.0.1:${address.port}`;
   const home = await fetch(baseUrl, { headers: { Host: `127.0.0.1:${address.port}` } });
   assert.equal(home.status, 200);
   assert.match(home.headers.get('content-type'), /text\/html/);
   assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(home.headers.get('set-cookie'), null);
+
+  const serviceWorker = await fetch(`${baseUrl}/sw.js`, { headers: { Host: `127.0.0.1:${address.port}` } });
+  assert.equal(serviceWorker.status, 200);
+  assert.match(await serviceWorker.text(), /ninho-static-v3/);
 
   const health = await fetch(`${baseUrl}/healthz`, { headers: { Host: `127.0.0.1:${address.port}` } });
   assert.equal(health.status, 200);
