@@ -3,6 +3,9 @@ import { request as httpRequest } from 'node:http';
 import { after, before, test } from 'node:test';
 import { WebSocket } from 'ws';
 import { createNinhoServer, hostAndOriginAreAllowed, makePairingCode } from '../server.js';
+import qrcode from 'qrcode-generator';
+import { createPairingUrl, readPairingCodeFromFragment } from '../public/pairing.js';
+import { createSignalInbox } from '../public/signal-inbox.js';
 
 const app = createNinhoServer({
   env: {
@@ -65,6 +68,57 @@ test('pairing code carries 192 random bits in a URL-safe 32-character token', ()
   const code = makePairingCode();
   assert.match(code, /^[A-Za-z0-9_-]{32}$/);
   assert.notEqual(makePairingCode(), code);
+});
+
+test('pairing URL keeps its bearer code in a validated, local fragment and creates a QR payload', async () => {
+  const code = makePairingCode();
+  const link = createPairingUrl('https://ninho.example.com', code);
+  const url = new URL(link);
+  assert.equal(url.origin, 'https://ninho.example.com');
+  assert.equal(url.pathname, '/');
+  assert.equal(url.search, '');
+  assert.equal(readPairingCodeFromFragment(url.hash), code);
+  assert.equal(readPairingCodeFromFragment('#join=invalid'), null);
+  assert.throws(() => createPairingUrl('javascript:alert(1)', code), /Origem/);
+  assert.throws(() => createPairingUrl('https://ninho.example.com', 'short'), /Código/);
+
+  const qr = qrcode(0, 'M');
+  qr.addData(link, 'Byte');
+  qr.make();
+  assert.ok(qr.getModuleCount() >= 21);
+  assert.equal(qr.isDark(0, 0), true);
+
+  const response = await fetch(`http://127.0.0.1:${address.port}/vendor/qrcode.mjs`, {
+    headers: { Host: `127.0.0.1:${address.port}` }
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /javascript/);
+  assert.equal(response.headers.get('cache-control'), 'no-cache');
+  assert.match(await response.text(), /export default qrcode/);
+});
+
+test('monitor buffers offer before joined and early ICE until its peer connection is initialized', async () => {
+  const inbox = createSignalInbox();
+  const delivered = [];
+  const handle = async signal => delivered.push(signal.type);
+
+  inbox.receive({ type: 'offer' }, handle);
+  inbox.receive({ type: 'candidate' }, handle);
+  assert.deepEqual(delivered, []);
+
+  await inbox.flush(handle);
+  assert.deepEqual(delivered, ['offer', 'candidate']);
+
+  await inbox.receive({ type: 'candidate' }, handle);
+  assert.deepEqual(delivered, ['offer', 'candidate', 'candidate']);
+  inbox.clear();
+  inbox.receive({ type: 'candidate' }, handle);
+  inbox.receive({ type: 'offer' }, handle);
+  await inbox.flush(handle);
+  assert.deepEqual(delivered, ['offer', 'candidate', 'candidate', 'candidate', 'offer']);
+  inbox.clear();
+  inbox.receive({ type: 'answer' }, handle);
+  assert.deepEqual(delivered, ['offer', 'candidate', 'candidate', 'candidate', 'offer']);
 });
 
 test('same-origin host validation rejects mismatched and malformed origins', () => {
@@ -179,7 +233,7 @@ test('TURN credentials are temporary and secret-bearing URLs are rejected', asyn
   }
 });
 
-test('pair code can be consumed once and signaling is forwarded only to the paired peer', async () => {
+test('pairing is single-use and relays the complete offer/answer/ICE signaling flow only to its peer', async () => {
   const camera = await connect();
   const createdPromise = nextMessage(camera);
   camera.send(JSON.stringify({ type: 'create' }));
@@ -194,11 +248,63 @@ test('pair code can be consumed once and signaling is forwarded only to the pair
   assert.equal((await joinedPromise).type, 'joined');
   assert.equal((await connectedPromise).type, 'peer-connected');
 
+  const offerSdp = `v=0\r\n${'a=candidate:1 1 UDP 2122252543 192.0.2.1 50000 typ host\r\n'.repeat(110)}`;
+  assert.ok(offerSdp.length > 6000);
+  assert.ok(offerSdp.length < 7600);
   const forwardedPromise = nextMessage(monitor);
-  camera.send(JSON.stringify({ type: 'signal', data: { type: 'offer', sdp: 'v=0\r\n' } }));
+  camera.send(JSON.stringify({ type: 'signal', data: { type: 'offer', sdp: offerSdp } }));
   assert.deepEqual(await forwardedPromise, {
     type: 'signal',
-    data: { type: 'offer', sdp: 'v=0\r\n' }
+    data: { type: 'offer', sdp: offerSdp }
+  });
+
+  const answerPromise = nextMessage(camera);
+  monitor.send(JSON.stringify({ type: 'signal', data: { type: 'answer', sdp: 'v=0\r\n' } }));
+  assert.deepEqual(await answerPromise, {
+    type: 'signal',
+    data: { type: 'answer', sdp: 'v=0\r\n' }
+  });
+
+  const candidateFromCamera = {
+    candidate: 'candidate:1 1 UDP 2122252543 192.0.2.1 50000 typ host',
+    sdpMid: '0',
+    sdpMLineIndex: 0,
+    usernameFragment: 'abcd'
+  };
+  const candidateFromMonitor = {
+    candidate: 'candidate:2 1 UDP 2122252543 192.0.2.2 50001 typ host',
+    sdpMid: '0',
+    sdpMLineIndex: 0,
+    usernameFragment: 'efgh'
+  };
+  const monitorCandidatePromise = nextMessage(monitor);
+  camera.send(JSON.stringify({ type: 'signal', data: { type: 'candidate', candidate: candidateFromCamera } }));
+  assert.deepEqual(await monitorCandidatePromise, {
+    type: 'signal',
+    data: { type: 'candidate', candidate: candidateFromCamera }
+  });
+
+  const cameraCandidatePromise = nextMessage(camera);
+  monitor.send(JSON.stringify({ type: 'signal', data: { type: 'candidate', candidate: candidateFromMonitor } }));
+  assert.deepEqual(await cameraCandidatePromise, {
+    type: 'signal',
+    data: { type: 'candidate', candidate: candidateFromMonitor }
+  });
+
+  const oversizedSdp = `v=0\r\n${'x'.repeat(7596)}`;
+  assert.equal(oversizedSdp.length, 7601);
+  const oversizedErrorPromise = nextMessage(camera);
+  camera.send(JSON.stringify({ type: 'signal', data: { type: 'offer', sdp: oversizedSdp } }));
+  assert.deepEqual(await oversizedErrorPromise, {
+    type: 'error',
+    message: 'Descrição SDP excede o limite de 7600 caracteres.'
+  });
+
+  const invalidActionPromise = nextMessage(camera);
+  camera.send(JSON.stringify({ type: 'restart' }));
+  assert.deepEqual(await invalidActionPromise, {
+    type: 'error',
+    message: 'Ação não permitida.'
   });
 
   const replay = await connect();

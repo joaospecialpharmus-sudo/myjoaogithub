@@ -13,6 +13,7 @@ const MAX_CONNECTIONS = 100;
 const MAX_CONNECTIONS_PER_IP = 8;
 const MAX_RATE_BUCKETS = 1000;
 const MAX_MESSAGE_BYTES = 8192;
+const MAX_SIGNAL_SDP_LENGTH = 7600;
 const MAX_PEER_BUFFERED_BYTES = 64 * 1024;
 const SOCKET_HEARTBEAT_MS = 30_000;
 const RATE_BUCKET_TTL_MS = 10 * 60 * 1000;
@@ -20,6 +21,9 @@ const STATIC_FILES = new Set([
   '/index.html',
   '/styles.css',
   '/app.js',
+  '/pairing.js',
+  '/signal-inbox.js',
+  '/vendor/qrcode.mjs',
   '/sw.js',
   '/manifest.webmanifest',
   '/icon.svg'
@@ -28,6 +32,7 @@ const MIME_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
   ['.css', 'text/css; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
+  ['.mjs', 'text/javascript; charset=utf-8'],
   ['.json', 'application/manifest+json; charset=utf-8'],
   ['.webmanifest', 'application/manifest+json; charset=utf-8'],
   ['.svg', 'image/svg+xml']
@@ -174,29 +179,35 @@ function takeRateToken(bucket, now, capacity, refillPerSecond) {
   return true;
 }
 
-function validateSignal(data) {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+function signalValidationError(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return 'Mensagem de sinalização inválida.';
   if (data.type === 'offer' || data.type === 'answer') {
-    return Object.keys(data).length === 2
-      && typeof data.sdp === 'string'
-      && data.sdp.length > 0
-      && data.sdp.length <= 6000;
+    if (Object.keys(data).length !== 2 || typeof data.sdp !== 'string' || data.sdp.length === 0) {
+      return 'Descrição SDP inválida.';
+    }
+    if (data.sdp.length > MAX_SIGNAL_SDP_LENGTH) {
+      return `Descrição SDP excede o limite de ${MAX_SIGNAL_SDP_LENGTH} caracteres.`;
+    }
+    return null;
   }
   if (data.type === 'candidate') {
-    if (Object.keys(data).length !== 2) return false;
-    if (data.candidate === null) return true;
+    if (Object.keys(data).length !== 2) return 'Candidato ICE inválido.';
+    if (data.candidate === null) return null;
     const candidate = data.candidate;
-    return candidate
+    const isValid = candidate
       && typeof candidate === 'object'
       && !Array.isArray(candidate)
       && Object.keys(candidate).every(key => ['candidate', 'sdpMid', 'sdpMLineIndex', 'usernameFragment'].includes(key))
       && typeof candidate.candidate === 'string'
       && candidate.candidate.length <= 2048
-      && (candidate.sdpMid === null || typeof candidate.sdpMid === 'string')
-      && (candidate.sdpMLineIndex === null || Number.isInteger(candidate.sdpMLineIndex))
-      && (candidate.usernameFragment === undefined || candidate.usernameFragment === null || typeof candidate.usernameFragment === 'string');
+      && (candidate.sdpMid === null || typeof candidate.sdpMid === 'string' && candidate.sdpMid.length <= 256)
+      && (candidate.sdpMLineIndex === null || Number.isInteger(candidate.sdpMLineIndex)
+        && candidate.sdpMLineIndex >= 0 && candidate.sdpMLineIndex <= 255)
+      && (candidate.usernameFragment === undefined || candidate.usernameFragment === null
+        || typeof candidate.usernameFragment === 'string' && candidate.usernameFragment.length <= 256);
+    return isValid ? null : 'Candidato ICE inválido.';
   }
-  return false;
+  return 'Tipo de sinalização não permitido.';
 }
 
 export function createNinhoServer({ env = process.env } = {}) {
@@ -268,7 +279,7 @@ export function createNinhoServer({ env = process.env } = {}) {
       return;
     }
     response.setHeader('Content-Type', MIME_TYPES.get(extname(file)) || 'application/octet-stream');
-    response.setHeader('Cache-Control', pathname === '/index.html' ? 'no-cache' : 'public, max-age=3600');
+    response.setHeader('Cache-Control', 'no-cache');
     createReadStream(file).pipe(response);
   });
   server.headersTimeout = 10_000;
@@ -376,8 +387,16 @@ export function createNinhoServer({ env = process.env } = {}) {
         return;
       }
 
-      if (message.type === 'signal' && Object.keys(message).length === 2
-        && peer.pairing && validateSignal(message.data)) {
+      if (message.type === 'signal') {
+        if (Object.keys(message).length !== 2 || !peer.pairing) {
+          fail('Ação de sinalização inválida ou sessão não pareada.');
+          return;
+        }
+        const validationError = signalValidationError(message.data);
+        if (validationError) {
+          fail(validationError);
+          return;
+        }
         const counterpart = peer.role === 'camera' ? peer.pairing.monitor : peer.pairing.camera;
         if (!counterpart || counterpart.ws.readyState !== WebSocket.OPEN) {
           fail('O outro aparelho ainda não está conectado.');

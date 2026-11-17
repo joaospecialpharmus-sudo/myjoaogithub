@@ -69,6 +69,7 @@ No plano gratuito, o serviço pode entrar em suspensão após inatividade. Ao ac
 ## Segurança e limitações
 
 - O pareamento usa 24 bytes aleatórios criptográficos (192 bits), codificados em 32 caracteres URL-safe. O código é de uso único e expira após dois minutos.
+- A câmera gera o QR localmente usando código incluído no app, sem CDN. O link carrega o código somente no fragmento (`#join=...`), que o navegador não envia em requisições HTTP; ao abrir, o app remove o fragmento do histórico e pede confirmação antes de parear. Qualquer detentor do link pode tentar resgatar o código primeiro; compartilhe-o somente com o monitor pretendido. O código manual continua disponível como alternativa.
 - WebSocket valida Host e Origin contra a mesma origem permitida, além de limitar tamanho de mensagens, conexões simultâneas e frequência de conexão/mensagens.
 - A configuração ICE e as conexões WebSocket têm limites por endereço IP; conexões sem heartbeat são encerradas e o encaminhamento de sinalização aplica limite de backpressure.
 - A sinalização tem tipos e formatos restritos. Dados de câmera, controles e áudio não são guardados no servidor.

@@ -4,6 +4,9 @@ const STATIC_ASSETS = [
   '/index.html',
   '/styles.css',
   '/app.js',
+  '/pairing.js',
+  '/signal-inbox.js',
+  '/vendor/qrcode.mjs',
   '/manifest.webmanifest',
   '/icon.svg'
 ];

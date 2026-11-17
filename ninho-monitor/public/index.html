@@ -81,7 +81,17 @@
             <p id="pairing-code" class="pairing-code" aria-live="polite"></p>
             <p id="pairing-status" class="status-text">Aguardando o monitor conectar…</p>
           </div>
-          <button id="copy-code" class="secondary-button" type="button">Copiar código</button>
+          <div class="pairing-share">
+            <div class="pairing-qr-wrap">
+              <canvas id="pairing-qr" width="220" height="220" aria-label="QR Code com o link temporário para parear"></canvas>
+              <p>Escaneie com a câmera do celular do monitor. O QR é gerado neste aparelho; o código fica no fragmento do link, que não é enviado na requisição ao servidor.</p>
+            </div>
+            <div class="pairing-actions">
+              <button id="copy-link" class="secondary-button" type="button">Copiar link de pareamento</button>
+              <button id="copy-code" class="secondary-button" type="button">Copiar código manual</button>
+            </div>
+          </div>
+          <p class="pairing-warning"><strong>Link e QR são acesso temporário:</strong> qualquer pessoa que obtenha o link pode tentar resgatar o código primeiro. Compartilhe apenas com o monitor pretendido.</p>
         </div>
         <div class="local-status" id="camera-status" role="status" aria-live="polite"></div>
         <div class="notice-strip"><strong>Privacidade:</strong> o vídeo não passa pelo servidor de sinalização. A conexão pode usar um serviço TURN configurado pelo administrador apenas para encaminhar pacotes criptografados quando a rede não permitir conexão direta.</div>
@@ -106,9 +116,11 @@
             <span class="connection-badge" id="connection-badge"><span></span> Conectando</span>
             <button id="end-session" class="text-button" type="button">Encerrar conexão</button>
           </div>
+          <p id="connection-detail" class="connection-detail" role="status" aria-live="polite">Aguardando a negociação de mídia…</p>
           <div class="monitor-video-wrap">
             <video id="remote-video" autoplay playsinline></video>
             <div id="monitor-placeholder" class="monitor-placeholder">Aguardando vídeo da câmera…</div>
+            <button id="play-video" class="play-video" type="button" hidden>Toque para iniciar áudio e vídeo</button>
             <span class="video-label">NINHO · AO VIVO</span>
           </div>
           <div class="control-card">

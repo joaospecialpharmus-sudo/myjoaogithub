@@ -1,3 +1,7 @@
+import qrcode from './vendor/qrcode.mjs';
+import { createPairingUrl, readPairingCodeFromFragment } from './pairing.js';
+import { createSignalInbox } from './signal-inbox.js';
+
 const $ = selector => document.querySelector(selector);
 const homeScreen = $('#home-screen');
 const cameraScreen = $('#camera-screen');
@@ -28,6 +32,9 @@ let iceConfiguration;
 let previousFrame;
 let lastAlertAt = 0;
 let pendingIceCandidates = [];
+let pairingUrl;
+let peerConnectTimer;
+const pendingMonitorSignals = createSignalInbox();
 
 function showScreen(screen) {
   for (const candidate of [homeScreen, cameraScreen, monitorScreen]) candidate.hidden = candidate !== screen;
@@ -58,8 +65,8 @@ function connectSocket(onMessage) {
     const ws = new WebSocket(websocketUrl());
     const timeout = setTimeout(() => {
       ws.close();
-      reject(new Error('O servidor de sinalização não respondeu.'));
-    }, 10000);
+      reject(new Error('O servidor não respondeu. Em uma demo gratuita, ele pode estar acordando; tente novamente em alguns segundos.'));
+    }, 60000);
     ws.addEventListener('open', () => {
       clearTimeout(timeout);
       resolve(ws);
@@ -75,6 +82,18 @@ function connectSocket(onMessage) {
         reportError('O servidor enviou uma resposta inválida.');
       }
     });
+    $('#copy-link').addEventListener('click', async () => {
+      if (!pairingUrl) {
+        cameraStatus.textContent = 'O link de pareamento ainda não está disponível.';
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(pairingUrl);
+        $('#copy-link').textContent = 'Link copiado';
+      } catch {
+        cameraStatus.textContent = 'Não foi possível copiar. Use o QR ou compartilhe o código manualmente.';
+      }
+    });
     ws.addEventListener('close', event => {
       if (event.code !== 1000 && event.code !== 1001) reportError('A conexão com o servidor foi encerrada.');
     });
@@ -83,11 +102,15 @@ function connectSocket(onMessage) {
 
 function reportError(message) {
   if (selectedRole === 'camera') cameraStatus.textContent = message;
-  if (selectedRole === 'monitor') monitorStatus.textContent = message;
+  if (selectedRole === 'monitor') {
+    monitorStatus.textContent = message;
+    if (!$('#monitor-session').hidden) $('#connection-detail').textContent = message;
+  }
 }
 
 function closeSession() {
   clearInterval(pairTimer);
+  clearTimeout(peerConnectTimer);
   clearTimeout(motionTimer);
   cancelAnimationFrame(volumeFrame);
   motionTimer = undefined;
@@ -100,7 +123,9 @@ function closeSession() {
   dataChannel = undefined;
   if (peer) peer.close();
   peer = undefined;
+  pairingUrl = undefined;
   pendingIceCandidates = [];
+  pendingMonitorSignals.clear();
   if (socket) socket.close(1000, 'Sessão encerrada');
   socket = undefined;
   if (localStream) {
@@ -113,10 +138,12 @@ function closeSession() {
   $('#join-form').hidden = false;
   $('#pairing-card').hidden = true;
   $('#pairing-code').textContent = '';
+  $('#pairing-qr').getContext('2d')?.clearRect(0, 0, $('#pairing-qr').width, $('#pairing-qr').height);
   $('#pairing-input').value = '';
   $('#camera-placeholder').hidden = false;
   $('#camera-live').hidden = true;
   $('#monitor-placeholder').hidden = false;
+  $('#play-video').hidden = true;
   $('#connection-badge').innerHTML = '<span></span> Conectando';
   for (const control of [$('#switch-camera'), $('#mute-camera'), $('#resolution-select'), $('#zoom-range'), $('#torch-button')]) {
     control.disabled = true;
@@ -143,15 +170,59 @@ function createPeer(configuration, role) {
   if (!('RTCPeerConnection' in window)) throw new Error('Este navegador não oferece WebRTC.');
   pendingIceCandidates = [];
   peer = new RTCPeerConnection(configuration);
+  const activePeer = peer;
+  clearTimeout(peerConnectTimer);
+  peerConnectTimer = setTimeout(() => {
+    if (peer !== activePeer || peer.connectionState === 'connected') return;
+    const message = 'A mídia ainda não conectou. Confira a rede dos dois aparelhos; STUN não atravessa todas as redes e talvez seja necessário configurar TURN.';
+    if (role === 'monitor') $('#connection-detail').textContent = message;
+    else $('#pairing-status').textContent = message;
+  }, 30000);
   peer.onicecandidate = event => {
     if (event.candidate) sendSignal({ type: 'candidate', candidate: event.candidate.toJSON() });
+  };
+  peer.oniceconnectionstatechange = () => {
+    const state = peer?.iceConnectionState;
+    const messages = {
+      checking: 'Procurando uma rota de mídia entre os aparelhos (ICE)…',
+      connected: 'Rota de mídia encontrada; concluindo a conexão segura.',
+      completed: 'Rota de mídia pronta; aguardando o fluxo de vídeo.',
+      disconnected: 'A rota de mídia foi interrompida; tentando recuperar a conexão…',
+      failed: 'A negociação de mídia falhou. STUN público não atravessa todas as redes; configure um servidor TURN confiável.',
+      closed: 'A negociação de mídia foi encerrada.'
+    };
+    if (!messages[state]) return;
+    if (role === 'monitor') $('#connection-detail').textContent = messages[state];
+    else $('#pairing-status').textContent = messages[state];
+    if (state === 'failed') reportError(messages[state]);
+  };
+  peer.onicegatheringstatechange = () => {
+    if (role === 'monitor' && peer?.iceGatheringState === 'gathering'
+      && peer.iceConnectionState === 'new') {
+      $('#connection-detail').textContent = 'Coletando rotas de rede para tentar estabelecer a conexão…';
+    }
+  };
+  peer.onicecandidateerror = event => {
+    if (role === 'monitor' && peer?.iceConnectionState !== 'connected') {
+      const code = event.errorCode ? ` (${event.errorCode})` : '';
+      $('#connection-detail').textContent = `Um servidor STUN/TURN não respondeu${code}. Verifique a rede ou configure TURN.`;
+    }
   };
   peer.onconnectionstatechange = () => {
     const state = peer?.connectionState;
     if (role === 'monitor') {
       const badge = $('#connection-badge');
       badge.lastChild.textContent = ` ${state === 'connected' ? 'Conectado ponto a ponto' : state === 'failed' ? 'Conexão indisponível' : state === 'disconnected' ? 'Conexão interrompida' : 'Conectando'}`;
+      if (state === 'connected') clearTimeout(peerConnectTimer);
+      $('#connection-detail').textContent = state === 'connected'
+        ? 'Mídia conectada diretamente ou por retransmissão TURN.'
+        : state === 'failed'
+          ? 'A negociação WebRTC falhou. Confira se os dois aparelhos estão online e se a rede permite STUN/TURN.'
+          : state === 'disconnected'
+            ? 'A conexão de mídia foi interrompida; aguardando recuperação da rede.'
+            : 'Código aceito. Acordando o serviço e negociando a conexão de mídia…';
     } else if (role === 'camera' && state === 'connected') {
+      clearTimeout(peerConnectTimer);
       $('#pairing-status').textContent = 'Conectado. O áudio e o vídeo estão sendo transmitidos diretamente.';
     }
     if (state === 'failed') reportError('A conexão de mídia falhou. Verifique a rede e a configuração STUN/TURN.');
@@ -175,10 +246,9 @@ function createPeer(configuration, role) {
     };
     peer.ontrack = event => {
       remoteVideo.srcObject = event.streams[0] || new MediaStream([event.track]);
-      remoteVideo.play().catch(() => {
-        monitorStatus.textContent = 'Toque no vídeo para iniciar a reprodução.';
-      });
       $('#monitor-placeholder').hidden = true;
+      $('#connection-detail').textContent = 'Mídia recebida. Iniciando reprodução neste aparelho…';
+      playRemoteVideo();
       startLocalAlerts();
     };
   }
@@ -271,7 +341,9 @@ async function startCamera() {
     $('#camera-placeholder').hidden = true;
     $('#camera-live').hidden = false;
     await refreshDevices();
+    cameraStatus.textContent = 'Conectando ao serviço de sinalização…';
     socket = await connectSocket(handleCameraMessage);
+    cameraStatus.textContent = '';
     socket.send(JSON.stringify({ type: 'create' }));
   } catch (error) {
     cameraStatus.textContent = explainError(error);
@@ -290,6 +362,12 @@ function handleCameraMessage(message) {
   if (message.type === 'created') {
     $('#pairing-card').hidden = false;
     $('#pairing-code').textContent = message.code;
+    try {
+      pairingUrl = createPairingUrl(location.origin, message.code);
+      renderPairingQr(pairingUrl);
+    } catch (error) {
+      reportError(`Não foi possível gerar o QR localmente: ${explainError(error)}`);
+    }
     $('#start-camera').textContent = 'Código criado';
     $('#pairing-status').textContent = 'Aguardando o monitor conectar…';
     pairDeadline = Date.now() + message.expiresInSeconds * 1000;
@@ -302,6 +380,7 @@ function handleCameraMessage(message) {
   } else if (message.type === 'peer-connected') {
     clearInterval(pairTimer);
     $('#pairing-status').textContent = 'Monitor conectado. Estabelecendo transmissão…';
+    $('#connection-detail').textContent = 'Monitor pareado. Negociando a conexão WebRTC…';
     loadIceConfiguration()
       .then(configuration => createPeer(configuration, 'camera'))
       .catch(error => reportError(explainError(error)));
@@ -424,7 +503,7 @@ async function joinCamera(event) {
     return;
   }
   $('#join-button').disabled = true;
-  monitorStatus.textContent = 'Conectando ao serviço de sinalização…';
+  monitorStatus.textContent = 'Conectando ao serviço de sinalização… Se a demo gratuita estiver suspensa, aguarde o serviço acordar.';
   try {
     iceConfiguration = await loadIceConfiguration();
     socket = await connectSocket(handleMonitorMessage);
@@ -441,32 +520,56 @@ function handleMonitorMessage(message) {
     $('#join-form').hidden = true;
     $('#monitor-session').hidden = false;
     monitorStatus.textContent = '';
+    $('#connection-detail').textContent = 'Código aceito. Negociando a conexão de mídia…';
     try {
       createPeer(iceConfiguration, 'monitor');
+      pendingMonitorSignals.flush(handleMonitorSignal)
+        .catch(error => reportError(`Não foi possível negociar a conexão: ${explainError(error)}`));
     } catch (error) {
       reportError(explainError(error));
     }
   } else if (message.type === 'signal') {
-    handleMonitorSignal(message.data).catch(error => reportError(`Não foi possível negociar a conexão: ${explainError(error)}`));
+    pendingMonitorSignals.receive(message.data, data => handleMonitorSignal(data)
+      .catch(error => reportError(`Não foi possível negociar a conexão: ${explainError(error)}`)));
   } else if (message.type === 'error') {
     monitorStatus.textContent = message.message;
     $('#join-button').disabled = false;
     socket?.close(1000, 'Pareamento recusado');
     socket = undefined;
   } else if (message.type === 'peer-disconnected') {
-    monitorStatus.textContent = 'A câmera encerrou a conexão.';
+    reportError('A câmera encerrou a conexão. Volte à tela inicial e peça um novo código para reconectar.');
+    $('#connection-badge').lastChild.textContent = ' Câmera desconectada';
+    $('#monitor-placeholder').textContent = 'A câmera encerrou a conexão.';
+    $('#monitor-placeholder').hidden = false;
+    $('#play-video').hidden = true;
+    enableRemoteControls(false);
+    if (peer) peer.close();
+    peer = undefined;
   } else if (message.type === 'expired') {
     monitorStatus.textContent = 'O código expirou. Peça outro código à câmera.';
+  }
+}
+
+async function playRemoteVideo() {
+  try {
+    await remoteVideo.play();
+    $('#play-video').hidden = true;
+    $('#connection-detail').textContent = 'Áudio e vídeo recebidos neste aparelho.';
+  } catch {
+    $('#play-video').hidden = false;
+    $('#connection-detail').textContent = 'O navegador bloqueou a reprodução automática. Toque no botão sobre o vídeo para iniciar áudio e imagem.';
   }
 }
 
 async function handleMonitorSignal(data) {
   if (!peer || !data) return;
   if (data.type === 'offer') {
+    $('#connection-detail').textContent = 'Oferta recebida. Preparando a resposta WebRTC…';
     await peer.setRemoteDescription({ type: 'offer', sdp: data.sdp });
     await flushPendingIceCandidates();
     await peer.setLocalDescription(await peer.createAnswer());
     sendSignal({ type: 'answer', sdp: peer.localDescription.sdp });
+    $('#connection-detail').textContent = 'Resposta enviada. Aguardando conexão de mídia; redes restritas podem exigir TURN.';
   } else if (data.type === 'candidate' && data.candidate) {
     await addIceCandidate(data.candidate);
   }
@@ -584,6 +687,36 @@ function updateAlertMonitoring() {
   $('#alert-status').textContent = motion || volume ? 'Análise experimental ativa apenas enquanto esta tela estiver aberta.' : 'Alertas desligados.';
 }
 
+function renderPairingQr(url) {
+  const qr = qrcode(0, 'M');
+  qr.addData(url, 'Byte');
+  qr.make();
+  const canvas = $('#pairing-qr');
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas indisponível neste navegador.');
+  const count = qr.getModuleCount();
+  const cellSize = 4;
+  const margin = 4;
+  canvas.width = canvas.height = (count + margin * 2) * cellSize;
+  context.fillStyle = '#fff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.save();
+  context.translate(margin * cellSize, margin * cellSize);
+  qr.renderTo2dContext(context, cellSize);
+  context.restore();
+}
+
+function consumePairingFragment() {
+  if (!location.hash) return;
+  const code = readPairingCodeFromFragment(location.hash);
+  history.replaceState(null, '', `${location.pathname}${location.search}`);
+  if (code) {
+    $('#pairing-input').value = code;
+    monitorStatus.textContent = 'Link de pareamento recebido. Confira o aparelho da câmera e toque em Conectar.';
+    showScreen(monitorScreen);
+  }
+}
+
 for (const button of document.querySelectorAll('[data-role]')) {
   button.addEventListener('click', () => {
     if (button.dataset.role === 'camera') {
@@ -611,6 +744,7 @@ $('#end-session').addEventListener('click', () => {
   $('#join-button').disabled = false;
   $('#monitor-status').textContent = 'Conexão encerrada.';
 });
+$('#play-video').addEventListener('click', playRemoteVideo);
 $('#camera-select').addEventListener('change', () => replaceDevice('video', cameraSelect.value));
 $('#microphone-select').addEventListener('change', () => replaceDevice('audio', microphoneSelect.value));
 $('#copy-code').addEventListener('click', async () => {
@@ -643,6 +777,8 @@ $('#volume-alert').addEventListener('change', updateAlertMonitoring);
 $('#volume-threshold').addEventListener('input', updateAlertMonitoring);
 navigator.mediaDevices?.addEventListener?.('devicechange', refreshDevices);
 window.addEventListener('pagehide', closeSession);
+window.addEventListener('hashchange', consumePairingFragment);
+consumePairingFragment();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('/sw.js').catch(() => {
