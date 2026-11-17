@@ -45,7 +45,7 @@
         <p class="privacy-note"><span aria-hidden="true">◇</span> Sem conta, gravação ou nuvem de vídeo. A sinalização e o STUN podem ver dados de conexão, como seu IP; o vídeo não passa pelo servidor de sinalização.</p>
         <aside class="prototype-note">
           <strong>Protótipo experimental</strong>
-          <span>Não detecta choro, não oferece alertas confiáveis em segundo plano e não substitui supervisão. A disponibilidade depende do navegador e da rede.</span>
+          <span>Não classifica choro, não oferece alertas confiáveis em segundo plano e não substitui supervisão. A disponibilidade depende do navegador e da rede.</span>
         </aside>
       </section>
 
@@ -123,6 +123,10 @@
             <button id="play-video" class="play-video" type="button" hidden>Toque para iniciar áudio e vídeo</button>
             <span class="video-label">NINHO · AO VIVO</span>
           </div>
+          <div class="pip-actions">
+            <button id="pip-button" class="secondary-button" type="button" disabled>Abrir em mini janela</button>
+            <p id="pip-status" class="fine-print" role="status" aria-live="polite">A mini janela ficará disponível quando houver vídeo e o navegador oferecer suporte.</p>
+          </div>
           <div class="control-card">
             <h2>Controles remotos</h2>
             <div class="control-grid">
@@ -152,7 +156,7 @@
               <input id="volume-threshold" type="range" min="2" max="30" value="10">
             </label>
             <p id="alert-status" class="alert-status" aria-live="polite">Alertas desligados.</p>
-            <p class="warning-copy"><strong>Importante:</strong> volume não detecta choro, pode falhar e não é confiável em segundo plano. Estes alertas experimentais não substituem supervisão.</p>
+            <p class="warning-copy"><strong>Importante:</strong> volume não detecta choro. Este protótipo não classifica choro; o alerta de volume pode falhar e não é confiável em segundo plano. Estes alertas experimentais não substituem supervisão.</p>
           </div>
         </div>
         <div class="notice-strip">O acesso à câmera e ao microfone exige HTTPS (ou localhost). A imagem pode não conectar em algumas redes, mesmo com sinalização funcionando.</div>

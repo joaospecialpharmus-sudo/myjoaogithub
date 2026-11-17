@@ -102,6 +102,8 @@ select, input[type="text"] { width: 100%; min-height: 42px; margin: 7px 0 14px; 
 .monitor-video-wrap video { display: block; }
 .play-video { position: absolute; inset: auto 16px 16px; width: calc(100% - 32px); padding: 12px; border: 0; border-radius: 9px; background: rgba(15, 29, 26, .88); color: white; font-weight: 700; }
 .video-label { top: 13px; bottom: auto; letter-spacing: .12em; }
+.pip-actions { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.pip-actions .fine-print { margin: 0; }
 .control-card, .alert-card { margin-top: 14px; }
 .control-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; align-items: end; }
 .control-grid label { padding: 4px 0; }
@@ -134,5 +136,6 @@ select, input[type="text"] { width: 100%; min-height: 42px; margin: 7px 0 14px; 
   .pairing-actions { width: 100%; flex-direction: column; }
   .pairing-card .secondary-button { width: 100%; }
   .control-grid { grid-template-columns: 1fr; }
+  .pip-actions { align-items: stretch; flex-direction: column; }
   .screen-heading { margin-top: 15px; }
 }

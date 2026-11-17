@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ninho-static-v1';
+const CACHE_NAME = 'ninho-static-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -6,6 +6,7 @@ const STATIC_ASSETS = [
   '/app.js',
   '/pairing.js',
   '/signal-inbox.js',
+  '/picture-in-picture.js',
   '/vendor/qrcode.mjs',
   '/manifest.webmanifest',
   '/icon.svg'

@@ -5,6 +5,7 @@ import { WebSocket } from 'ws';
 import { createNinhoServer, hostAndOriginAreAllowed, makePairingCode } from '../server.js';
 import qrcode from 'qrcode-generator';
 import { createPairingUrl, readPairingCodeFromFragment } from '../public/pairing.js';
+import { isPictureInPictureActive, supportsPictureInPicture, togglePictureInPicture } from '../public/picture-in-picture.js';
 import { createSignalInbox } from '../public/signal-inbox.js';
 
 const app = createNinhoServer({
@@ -21,6 +22,48 @@ let address;
 before(async () => {
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   address = app.server.address();
+});
+
+test('Picture-in-Picture detects standard and WebKit video APIs and reports unsupported browsers', async () => {
+  const calls = [];
+  const video = {
+    requestPictureInPicture: async () => {
+      calls.push('enter-standard');
+      standardDocument.pictureInPictureElement = video;
+    }
+  };
+  const standardDocument = {
+    pictureInPictureEnabled: true,
+    pictureInPictureElement: null,
+    exitPictureInPicture: async () => {
+      calls.push('exit-standard');
+      standardDocument.pictureInPictureElement = null;
+    }
+  };
+
+  assert.equal(supportsPictureInPicture(video, standardDocument), true);
+  assert.equal(await togglePictureInPicture(video, standardDocument), true);
+  assert.equal(isPictureInPictureActive(video, standardDocument), true);
+  assert.equal(await togglePictureInPicture(video, standardDocument), false);
+  assert.equal(isPictureInPictureActive(video, standardDocument), false);
+
+  const webkitVideo = {
+    webkitPresentationMode: 'inline',
+    webkitSupportsPresentationMode: mode => mode === 'picture-in-picture',
+    webkitSetPresentationMode(mode) {
+      webkitVideo.webkitPresentationMode = mode;
+      calls.push(mode);
+    }
+  };
+  const webkitDocument = {};
+  assert.equal(supportsPictureInPicture(webkitVideo, webkitDocument), true);
+  assert.equal(await togglePictureInPicture(webkitVideo, webkitDocument), true);
+  assert.equal(isPictureInPictureActive(webkitVideo, webkitDocument), true);
+  assert.equal(await togglePictureInPicture(webkitVideo, webkitDocument), false);
+  assert.deepEqual(calls, ['enter-standard', 'exit-standard', 'picture-in-picture', 'inline']);
+
+  assert.equal(supportsPictureInPicture({}, {}), false);
+  await assert.rejects(() => togglePictureInPicture({}, {}), /não oferece mini janela/);
 });
 
 after(() => app.close());
@@ -95,6 +138,13 @@ test('pairing URL keeps its bearer code in a validated, local fragment and creat
   assert.match(response.headers.get('content-type'), /javascript/);
   assert.equal(response.headers.get('cache-control'), 'no-cache');
   assert.match(await response.text(), /export default qrcode/);
+
+  const pipModule = await fetch(`http://127.0.0.1:${address.port}/picture-in-picture.js`, {
+    headers: { Host: `127.0.0.1:${address.port}` }
+  });
+  assert.equal(pipModule.status, 200);
+  assert.match(pipModule.headers.get('content-type'), /javascript/);
+  assert.match(await pipModule.text(), /requestPictureInPicture/);
 });
 
 test('monitor buffers offer before joined and early ICE until its peer connection is initialized', async () => {

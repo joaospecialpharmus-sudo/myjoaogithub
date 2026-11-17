@@ -1,5 +1,6 @@
 import qrcode from './vendor/qrcode.mjs';
 import { createPairingUrl, readPairingCodeFromFragment } from './pairing.js';
+import { isPictureInPictureActive, supportsPictureInPicture, togglePictureInPicture } from './picture-in-picture.js';
 import { createSignalInbox } from './signal-inbox.js';
 
 const $ = selector => document.querySelector(selector);
@@ -82,18 +83,6 @@ function connectSocket(onMessage) {
         reportError('O servidor enviou uma resposta inválida.');
       }
     });
-    $('#copy-link').addEventListener('click', async () => {
-      if (!pairingUrl) {
-        cameraStatus.textContent = 'O link de pareamento ainda não está disponível.';
-        return;
-      }
-      try {
-        await navigator.clipboard.writeText(pairingUrl);
-        $('#copy-link').textContent = 'Link copiado';
-      } catch {
-        cameraStatus.textContent = 'Não foi possível copiar. Use o QR ou compartilhe o código manualmente.';
-      }
-    });
     ws.addEventListener('close', event => {
       if (event.code !== 1000 && event.code !== 1001) reportError('A conexão com o servidor foi encerrada.');
     });
@@ -134,6 +123,7 @@ function closeSession() {
   }
   cameraVideo.srcObject = null;
   remoteVideo.srcObject = null;
+  updatePictureInPictureButton();
   $('#monitor-session').hidden = true;
   $('#join-form').hidden = false;
   $('#pairing-card').hidden = true;
@@ -561,6 +551,45 @@ async function playRemoteVideo() {
   }
 }
 
+function updatePictureInPictureButton() {
+  const button = $('#pip-button');
+  const status = $('#pip-status');
+  const supported = supportsPictureInPicture(remoteVideo, document);
+  const videoReady = Boolean(remoteVideo.srcObject
+    && !remoteVideo.paused
+    && remoteVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA);
+  button.disabled = !supported || !videoReady;
+  button.textContent = isPictureInPictureActive(remoteVideo, document)
+    ? 'Voltar à página'
+    : 'Abrir em mini janela';
+  if (!supported) {
+    status.textContent = 'Mini janela indisponível pela página. Tente o PiP do navegador/sistema, se oferecido; caso contrário, mantenha esta página em primeiro plano.';
+  } else if (!videoReady) {
+    status.textContent = 'A mini janela ficará disponível quando a reprodução do vídeo começar.';
+  } else {
+    status.textContent = 'Abra a mini janela por este botão. O navegador pode interromper áudio ou vídeo em segundo plano.';
+  }
+}
+
+async function handlePictureInPictureClick() {
+  if (!supportsPictureInPicture(remoteVideo, document)) {
+    updatePictureInPictureButton();
+    return;
+  }
+  if (!remoteVideo.srcObject || remoteVideo.paused) {
+    $('#pip-status').textContent = 'Aguarde a reprodução do vídeo antes de abrir a mini janela.';
+    return;
+  }
+  try {
+    await togglePictureInPicture(remoteVideo, document);
+    updatePictureInPictureButton();
+  } catch (error) {
+    $('#pip-status').textContent = error?.name === 'NotAllowedError'
+      ? 'O navegador bloqueou a mini janela. Toque novamente após iniciar o vídeo.'
+      : error?.message || 'Não foi possível abrir a mini janela neste navegador.';
+  }
+}
+
 async function handleMonitorSignal(data) {
   if (!peer || !data) return;
   if (data.type === 'offer') {
@@ -745,6 +774,13 @@ $('#end-session').addEventListener('click', () => {
   $('#monitor-status').textContent = 'Conexão encerrada.';
 });
 $('#play-video').addEventListener('click', playRemoteVideo);
+$('#pip-button').addEventListener('click', handlePictureInPictureClick);
+remoteVideo.addEventListener('loadeddata', updatePictureInPictureButton);
+remoteVideo.addEventListener('playing', updatePictureInPictureButton);
+remoteVideo.addEventListener('pause', updatePictureInPictureButton);
+remoteVideo.addEventListener('enterpictureinpicture', updatePictureInPictureButton);
+remoteVideo.addEventListener('leavepictureinpicture', updatePictureInPictureButton);
+remoteVideo.addEventListener('webkitpresentationmodechanged', updatePictureInPictureButton);
 $('#camera-select').addEventListener('change', () => replaceDevice('video', cameraSelect.value));
 $('#microphone-select').addEventListener('change', () => replaceDevice('audio', microphoneSelect.value));
 $('#copy-code').addEventListener('click', async () => {
@@ -753,6 +789,18 @@ $('#copy-code').addEventListener('click', async () => {
     $('#copy-code').textContent = 'Código copiado';
   } catch {
     cameraStatus.textContent = 'Não foi possível copiar. Selecione e copie o código manualmente.';
+  }
+});
+$('#copy-link').addEventListener('click', async () => {
+  if (!pairingUrl) {
+    cameraStatus.textContent = 'O link de pareamento ainda não está disponível.';
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(pairingUrl);
+    $('#copy-link').textContent = 'Link copiado';
+  } catch {
+    cameraStatus.textContent = 'Não foi possível copiar. Use o QR ou compartilhe o código manualmente.';
   }
 });
 $('#switch-camera').addEventListener('click', () => sendControl('switch-camera', true));
@@ -776,6 +824,7 @@ $('#motion-alert').addEventListener('change', updateAlertMonitoring);
 $('#volume-alert').addEventListener('change', updateAlertMonitoring);
 $('#volume-threshold').addEventListener('input', updateAlertMonitoring);
 navigator.mediaDevices?.addEventListener?.('devicechange', refreshDevices);
+updatePictureInPictureButton();
 window.addEventListener('pagehide', closeSession);
 window.addEventListener('hashchange', consumePairingFragment);
 consumePairingFragment();
