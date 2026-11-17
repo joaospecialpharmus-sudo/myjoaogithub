@@ -9,6 +9,7 @@ import { isPictureInPictureActive, supportsPictureInPicture, togglePictureInPict
 import { createSignalInbox } from '../public/signal-inbox.js';
 import {
   canUseLocalNotifications,
+  getLocalNotificationAvailabilityMessage,
   motionThresholdForSensitivity,
   requestLocalNotificationPermission,
   showLocalNotification
@@ -72,7 +73,7 @@ test('Picture-in-Picture detects standard and WebKit video APIs and reports unsu
   await assert.rejects(() => togglePictureInPicture({}, {}), /não oferece mini janela/);
 });
 
-test('local notifications require secure context, user permission, and a service worker registration', async () => {
+test('local notifications require secure context and support service-worker or page notification APIs', async () => {
   let permissionRequests = 0;
   const windowObject = {
     isSecureContext: true,
@@ -99,6 +100,11 @@ test('local notifications require secure context, user permission, and a service
   assert.equal(canUseLocalNotifications(windowObject, navigatorObject), true);
   assert.equal(canUseLocalNotifications({ ...windowObject, isSecureContext: false }, navigatorObject), false);
   assert.equal(canUseLocalNotifications(windowObject, {}), false);
+  assert.match(getLocalNotificationAvailabilityMessage({ ...windowObject, isSecureContext: false }, navigatorObject), /HTTPS/);
+  assert.match(getLocalNotificationAvailabilityMessage(
+    { isSecureContext: true },
+    {}
+  ), /alertas na página/);
   assert.equal(await requestLocalNotificationPermission(windowObject, navigatorObject), 'granted');
   assert.equal(permissionRequests, 1);
   await showLocalNotification(navigatorObject, 'Movimento observado', 'O monitor percebeu movimento.', 'ninho-movimento');
@@ -106,11 +112,46 @@ test('local notifications require secure context, user permission, and a service
   assert.equal(calls[0].options.tag, 'ninho-movimento');
   assert.equal(calls[0].options.data.url, '/');
 
+  const nativeNotifications = [];
+  class NativeNotification {
+    constructor(title, options) {
+      nativeNotifications.push({ title, options });
+    }
+    static permission = 'granted';
+    static requestPermission = async () => 'granted';
+  }
+  assert.equal(canUseLocalNotifications(
+    { isSecureContext: true, Notification: NativeNotification },
+    {}
+  ), true);
+  await showLocalNotification(
+    { serviceWorker: undefined },
+    'Movimento observado',
+    'Mudança de imagem.',
+    'ninho-movimento',
+    { Notification: NativeNotification }
+  );
+  assert.equal(nativeNotifications.length, 1);
+  assert.equal(nativeNotifications[0].title, 'Movimento observado');
+  await assert.rejects(() => showLocalNotification(
+    {},
+    'Alerta',
+    'Teste',
+    'test',
+    { Notification: undefined }
+  ), /não permite mostrar notificações/);
+
   await assert.rejects(() => requestLocalNotificationPermission(
     { ...windowObject, isSecureContext: false },
     navigatorObject
   ), /contexto/);
-  await assert.rejects(() => showLocalNotification({ serviceWorker: { ready: Promise.resolve({}) } }, 'Alerta', 'Teste', 'test'), /service worker/);
+  await assert.rejects(() => showLocalNotification(
+    { serviceWorker: { ready: Promise.resolve({}) } },
+    'Alerta',
+    'Teste',
+    'test',
+    { Notification: undefined }
+  ), /não permite mostrar notificações/);
 });
 
 test('motion sensitivity lowers the detection threshold and clamps to the supported range', () => {
@@ -288,13 +329,14 @@ test('HTTP serves the app, refreshes the static cache, and never caches ICE conf
   assert.equal(home.headers.get('set-cookie'), null);
   const homeSource = await home.text();
   assert.match(homeSource, /Permitir notificações locais/);
+  assert.match(homeSource, /A permissão do sistema é opcional/);
   assert.match(homeSource, /Alerta de choro indisponível/);
   assert.match(homeSource, /Nível de áudio \(não é choro\)/);
 
   const serviceWorker = await fetch(`${baseUrl}/sw.js`, { headers: { Host: `127.0.0.1:${address.port}` } });
   assert.equal(serviceWorker.status, 200);
   const serviceWorkerSource = await serviceWorker.text();
-  assert.match(serviceWorkerSource, /ninho-static-v4/);
+  assert.match(serviceWorkerSource, /ninho-static-v5/);
   assert.match(serviceWorkerSource, /notificationclick/);
 
   const notifications = await fetch(`${baseUrl}/local-notifications.js`, {

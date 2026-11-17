@@ -3,6 +3,7 @@ import { createPairingUrl, readPairingCodeFromFragment } from './pairing.js';
 import { isPictureInPictureActive, supportsPictureInPicture, togglePictureInPicture } from './picture-in-picture.js';
 import {
   canUseLocalNotifications,
+  getLocalNotificationAvailabilityMessage,
   motionThresholdForSensitivity,
   requestLocalNotificationPermission,
   showLocalNotification
@@ -145,6 +146,7 @@ function closeSession() {
   $('#motion-alert').checked = false;
   $('#volume-alert').checked = false;
   $('#alert-status').textContent = 'Alertas desligados.';
+  $('#alert-event-status').textContent = '';
   $('#connection-badge').innerHTML = '<span></span> Conectando';
   for (const control of [$('#switch-camera'), $('#mute-camera'), $('#resolution-select'), $('#zoom-range'), $('#torch-button')]) {
     control.disabled = true;
@@ -657,21 +659,23 @@ function triggerLocalAlert(kind) {
     movimento: 'Foi observada mudança de imagem acima da sensibilidade escolhida.',
     'nível de áudio': 'O nível de áudio ultrapassou o limite escolhido; isso não identifica choro.'
   };
-  $('#alert-status').textContent = statusMessages[kind] || 'Alerta local neste aparelho.';
+  $('#alert-event-status').textContent = statusMessages[kind] || 'Alerta local neste aparelho.';
   if ('vibrate' in navigator) navigator.vibrate(150);
   const titles = {
     movimento: 'Movimento observado',
     'nível de áudio': 'Nível de áudio elevado'
   };
-  void showLocalNotification(
-    navigator,
-    titles[kind] || 'Alerta local',
-    notificationBodies[kind] || 'Uma condição observada atingiu o limite configurado.',
-    `ninho-${kind}`
-  )
-    .catch(() => {
-      $('#alert-status').textContent = 'A análise continua ativa, mas o navegador não conseguiu mostrar a notificação local.';
+  if (window.Notification?.permission === 'granted') {
+    void showLocalNotification(
+      navigator,
+      titles[kind] || 'Alerta local',
+      notificationBodies[kind] || 'Uma condição observada atingiu o limite configurado.',
+      `ninho-${kind}`,
+      window
+    ).catch(() => {
+      $('#notification-permission-status').textContent = 'O alerta apareceu nesta página, mas o navegador não conseguiu mostrá-lo nas notificações do sistema.';
     });
+  }
 }
 
 function startMotionAnalysis() {
@@ -742,16 +746,10 @@ function updateAlertMonitoring() {
   stopLocalAlerts();
   const motion = $('#motion-alert').checked;
   const volume = $('#volume-alert').checked;
-  if (window.Notification?.permission !== 'granted') {
-    $('#alert-status').textContent = motion || volume
-      ? 'Para receber alertas, permita notificações neste aparelho primeiro.'
-      : 'Alertas desligados.';
-    return;
-  }
   if (motion && remoteVideo.srcObject) startMotionAnalysis();
   if (volume && remoteVideo.srcObject) startVolumeAnalysis();
   $('#alert-status').textContent = motion || volume
-    ? 'Análise e notificações locais ativas enquanto esta sessão e página estiverem executando.'
+    ? 'Análise local ativa enquanto esta sessão e página estiverem executando. Notificações do sistema são opcionais.'
     : 'Alertas desligados.';
 }
 
@@ -760,24 +758,22 @@ function refreshNotificationControls() {
   const status = $('#notification-permission-status');
   const available = canUseLocalNotifications(window, navigator);
   const permission = window.Notification?.permission;
-  const allowed = available && permission === 'granted';
-  $('#motion-alert').disabled = !allowed;
-  $('#volume-alert').disabled = !allowed;
-  $('#motion-threshold').disabled = !allowed;
-  $('#volume-threshold').disabled = !allowed;
+  for (const id of ['motion-alert', 'volume-alert', 'motion-threshold', 'volume-threshold']) {
+    $(`#${id}`).disabled = false;
+  }
   button.disabled = !available || permission !== 'default';
   if (!available) {
     button.textContent = 'Notificações indisponíveis';
-    status.textContent = 'Este navegador não oferece notificações locais por service worker neste contexto.';
+    status.textContent = getLocalNotificationAvailabilityMessage(window, navigator);
   } else if (permission === 'granted') {
     button.textContent = 'Notificações permitidas';
-    status.textContent = 'Permissão ativa neste aparelho. No iPhone, use o Ninho instalado na Tela de Início quando necessário.';
+    status.textContent = 'Notificações do sistema permitidas neste aparelho.';
   } else if (permission === 'denied') {
     button.textContent = 'Permissão bloqueada';
-    status.textContent = 'Permita notificações nas configurações do navegador ou do app instalado.';
+    status.textContent = 'Permita notificações nas configurações para receber avisos do sistema. Os alertas na página continuam disponíveis.';
   } else {
     button.textContent = 'Permitir notificações locais';
-    status.textContent = 'A permissão será solicitada somente quando você tocar no botão.';
+    status.textContent = 'Opcional: permita avisos do sistema. Sem permissão, o alerta aparece somente nesta página.';
   }
 }
 
