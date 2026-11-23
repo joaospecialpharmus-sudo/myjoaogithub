@@ -81,7 +81,7 @@
         <div class="screen-heading">
           <p class="eyebrow">APARELHO DA CÂMERA</p>
           <h1>Prepare a câmera</h1>
-          <p>Deixe este aparelho conectado à energia e com o navegador aberto.</p>
+          <p>Mantenha esta página aberta e o aparelho conectado à energia. Ao alternar de app ou bloquear a tela, o navegador pode suspender câmera e áudio.</p>
         </div>
         <div class="camera-layout">
           <div class="video-card">
@@ -98,8 +98,11 @@
             <select id="camera-select"><option value="">Câmera padrão</option></select>
             <label for="microphone-select">Microfone</label>
             <select id="microphone-select"><option value="">Microfone padrão</option></select>
+            <label for="microphone-level">Nível captado pelo microfone <span id="microphone-level-value">0%</span></label>
+            <meter id="microphone-level" min="0" max="100" value="0" aria-label="Nível de som recebido pelo microfone"></meter>
+            <p id="microphone-status" class="fine-print" role="status" aria-live="polite">A medição local começa quando a câmera for iniciada. O app não reproduz nem envia o som de volta à câmera.</p>
             <button id="start-camera" class="primary-button" type="button">Iniciar câmera e criar código</button>
-            <p class="fine-print">O navegador pedirá acesso à câmera e ao microfone. Os dispositivos só são capturados depois do seu consentimento.</p>
+            <p class="fine-print">O navegador pedirá acesso à câmera e ao microfone. Os dispositivos só são capturados depois do seu consentimento. O áudio usa captação sem cancelamento de eco, supressão de ruído ou ganho automático, quando o navegador respeita essas opções.</p>
           </div>
         </div>
         <div id="pairing-card" class="pairing-card" hidden>

@@ -7,6 +7,7 @@ import qrcode from 'qrcode-generator';
 import { createPairingUrl, readPairingCodeFromFragment } from '../public/pairing.js';
 import { isPictureInPictureActive, supportsPictureInPicture, togglePictureInPicture } from '../public/picture-in-picture.js';
 import { createSignalInbox } from '../public/signal-inbox.js';
+import { createCameraMediaConstraints } from '../public/camera-media.js';
 import {
   canUseLocalNotifications,
   getLocalNotificationAvailabilityMessage,
@@ -164,6 +165,25 @@ test('motion sensitivity lowers the detection threshold and clamps to the suppor
   assert.equal(motionThresholdForSensitivity(0), motionThresholdForSensitivity(1));
   assert.equal(motionThresholdForSensitivity(11), motionThresholdForSensitivity(10));
   assert.throws(() => motionThresholdForSensitivity('invalid'), /numérica/);
+});
+
+test('camera capture prefers microphone audio without echo, noise, or automatic gain filtering', () => {
+  const defaults = createCameraMediaConstraints();
+  assert.deepEqual(defaults.audio, {
+    echoCancellation: { ideal: false },
+    noiseSuppression: { ideal: false },
+    autoGainControl: { ideal: false }
+  });
+  assert.equal(defaults.video.facingMode, 'environment');
+
+  const selected = createCameraMediaConstraints({
+    cameraDeviceId: 'camera-1',
+    microphoneDeviceId: 'microphone-1',
+    cameraFacing: 'user'
+  });
+  assert.deepEqual(selected.audio.deviceId, { exact: 'microphone-1' });
+  assert.deepEqual(selected.video.deviceId, { exact: 'camera-1' });
+  assert.equal(selected.video.facingMode, undefined);
 });
 
 after(() => app.close());
@@ -338,6 +358,14 @@ test('HTTP serves the app, refreshes the static cache, and never caches ICE conf
   assert.match(homeSource, /id="theme-toggle"/);
   assert.match(homeSource, /Alerta de choro indisponível/);
   assert.match(homeSource, /Nível de áudio \(não é choro\)/);
+  assert.match(homeSource, /microphone-level/);
+  assert.match(homeSource, /alternar de app ou bloquear a tela/);
+
+  const appSource = await (await fetch(`${baseUrl}/app.js`, {
+    headers: { Host: `127.0.0.1:${address.port}` }
+  })).text();
+  assert.match(appSource, /visibilitychange/);
+  assert.doesNotMatch(appSource, /pagehide['"]\s*,\s*closeSession/);
 
   const styles = await fetch(`${baseUrl}/styles.css`, { headers: { Host: `127.0.0.1:${address.port}` } });
   assert.equal(styles.status, 200);
@@ -355,7 +383,8 @@ test('HTTP serves the app, refreshes the static cache, and never caches ICE conf
   const serviceWorker = await fetch(`${baseUrl}/sw.js`, { headers: { Host: `127.0.0.1:${address.port}` } });
   assert.equal(serviceWorker.status, 200);
   const serviceWorkerSource = await serviceWorker.text();
-  assert.match(serviceWorkerSource, /gegcamera-static-v6/);
+  assert.match(serviceWorkerSource, /gegcamera-static-v7/);
+  assert.match(serviceWorkerSource, /camera-media\.js/);
   assert.match(serviceWorkerSource, /nursery-room\.svg/);
   assert.match(serviceWorkerSource, /notificationclick/);
 
@@ -368,6 +397,12 @@ test('HTTP serves the app, refreshes the static cache, and never caches ICE conf
   });
   assert.equal(notifications.status, 200);
   assert.match(await notifications.text(), /showNotification/);
+
+  const capture = await fetch(`${baseUrl}/camera-media.js`, {
+    headers: { Host: `127.0.0.1:${address.port}` }
+  });
+  assert.equal(capture.status, 200);
+  assert.match(await capture.text(), /noiseSuppression/);
 
   const health = await fetch(`${baseUrl}/healthz`, { headers: { Host: `127.0.0.1:${address.port}` } });
   assert.equal(health.status, 200);

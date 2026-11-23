@@ -45,6 +45,7 @@ No modo noite, o fundo é azul-petróleo `#18343D`, cartões `#24434B`, texto cr
 - Alertas podem usar rosa (atenção/indisponível) e menta (estado positivo), sempre com texto. Movimento/áudio e suas limitações continuam explicitados.
 - O botão de tema é acessível, acompanha a preferência do sistema até a pessoa selecionar um modo e atualiza `theme-color` do navegador. A escolha manual vale até recarregar a página.
 - Permissões de notificação continuam atrás de gesto explícito; no iPhone, a aba Safari não garante notificações de sistema. Alertas na página só funcionam durante a sessão ativa.
+- O formulário de câmera inclui um medidor visual de entrada do microfone e informa quando o navegador pausa/interrompe a faixa. O medidor não reconhece choro nem sons específicos.
 
 ## Layout e responsividade
 
@@ -54,6 +55,7 @@ No modo noite, o fundo é azul-petróleo `#18343D`, cartões `#24434B`, texto cr
 - O layout começa mobile-first; breakpoints em 680 px e 900 px organizam cartões em colunas. Em telas pequenas, o quarto detalhado é substituído por gradientes e estrelas CSS.
 - `prefers-reduced-motion` remove animações ambientais e transições não essenciais.
 - SVG é leve e local, servido e incluído no cache estático do PWA.
+- Alternar para outro app pode suspender mídia e WebRTC conforme o navegador e o sistema operacional; o estilo informa esse limite sem prometer operação em segundo plano.
 
 ## Acessibilidade e limites
 

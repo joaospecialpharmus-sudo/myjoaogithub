@@ -25,6 +25,7 @@ const STATIC_FILES = new Set([
   '/signal-inbox.js',
   '/picture-in-picture.js',
   '/local-notifications.js',
+  '/camera-media.js',
   '/vendor/qrcode.mjs',
   '/sw.js',
   '/manifest.webmanifest',

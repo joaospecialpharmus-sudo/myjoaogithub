@@ -9,6 +9,7 @@ import {
   showLocalNotification
 } from './local-notifications.js';
 import { createSignalInbox } from './signal-inbox.js';
+import { createCameraMediaConstraints } from './camera-media.js';
 
 const $ = selector => document.querySelector(selector);
 const homeScreen = $('#home-screen');
@@ -36,6 +37,9 @@ let motionTimer;
 let volumeFrame;
 let analysisSource;
 let analysisContext;
+let microphoneContext;
+let microphoneAnalyser;
+let microphoneMeterFrame;
 let iceConfiguration;
 let previousFrame;
 const lastAlertAt = new Map();
@@ -117,6 +121,7 @@ function closeSession() {
   analysisSource = undefined;
   if (analysisContext) analysisContext.close();
   analysisContext = undefined;
+  stopMicrophoneMeter();
   if (dataChannel) dataChannel.close();
   dataChannel = undefined;
   if (peer) peer.close();
@@ -145,6 +150,7 @@ function closeSession() {
   $('#play-video').hidden = true;
   $('#motion-alert').checked = false;
   $('#volume-alert').checked = false;
+  $('#microphone-status').textContent = 'Microfone inativo. Inicie a câmera para começar a captação.';
   $('#alert-status').textContent = 'Alertas desligados.';
   $('#alert-event-status').textContent = '';
   $('#connection-badge').innerHTML = '<span></span> Conectando';
@@ -157,6 +163,87 @@ function closeSession() {
   remoteMuted = false;
   remoteTorch = false;
   selectedRole = undefined;
+}
+
+function updateMicrophoneStatus(track) {
+  const status = $('#microphone-status');
+  if (!track) {
+    status.textContent = 'Microfone não disponível. Encerre a sessão e reinicie a câmera para tentar novamente.';
+  } else if (track.readyState === 'ended') {
+    status.textContent = 'O navegador ou sistema interrompeu o microfone. Mantenha esta página ativa e reinicie a câmera se a captação não voltar.';
+  } else if (track.muted) {
+    status.textContent = 'A captação do microfone está pausada pelo navegador ou dispositivo.';
+  } else if (!track.enabled) {
+    status.textContent = 'O monitor silenciou o microfone. A faixa local continua ativa, mas o áudio não está sendo enviado.';
+  } else if (microphoneContext?.state === 'suspended') {
+    status.textContent = 'O navegador pausou o medidor de áudio; volte a manter esta página visível para retomar.';
+  } else {
+    status.textContent = 'Microfone ativo. A medição local mostra se sons do ambiente estão chegando.';
+  }
+}
+
+function createMicrophoneAudioContext() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return undefined;
+  try {
+    const context = new AudioContext();
+    context.resume().catch(() => {});
+    return context;
+  } catch {
+    return undefined;
+  }
+}
+
+function stopMicrophoneMeter() {
+  cancelAnimationFrame(microphoneMeterFrame);
+  microphoneMeterFrame = undefined;
+  microphoneAnalyser = undefined;
+  if (microphoneContext) {
+    microphoneContext.close().catch(() => {});
+    microphoneContext = undefined;
+  }
+  $('#microphone-level').value = 0;
+  $('#microphone-level-value').textContent = '0%';
+}
+
+function startMicrophoneMeter(track, context) {
+  stopMicrophoneMeter();
+  updateMicrophoneStatus(track);
+  if (!context) {
+    $('#microphone-status').textContent = 'O microfone está selecionado, mas este navegador não oferece o medidor local de áudio.';
+    return;
+  }
+  try {
+    microphoneContext = context;
+    microphoneContext.addEventListener('statechange', () => {
+      if (selectedRole === 'camera') updateMicrophoneStatus(track);
+    });
+    microphoneAnalyser = microphoneContext.createAnalyser();
+    microphoneAnalyser.fftSize = 512;
+    microphoneContext.createMediaStreamSource(new MediaStream([track])).connect(microphoneAnalyser);
+    const samples = new Uint8Array(microphoneAnalyser.fftSize);
+    const inspect = () => {
+      if (!microphoneAnalyser) return;
+      microphoneAnalyser.getByteTimeDomainData(samples);
+      let sum = 0;
+      for (const sample of samples) {
+        const normalized = (sample - 128) / 128;
+        sum += normalized * normalized;
+      }
+      const level = Math.min(100, Math.round(Math.sqrt(sum / samples.length) * 1000));
+      $('#microphone-level').value = level;
+      $('#microphone-level-value').textContent = `${level}%`;
+      microphoneMeterFrame = requestAnimationFrame(inspect);
+    };
+    inspect();
+  } catch {
+    $('#microphone-status').textContent = 'O microfone está ativo, mas não foi possível iniciar o medidor local neste navegador.';
+  }
+  for (const event of ['mute', 'unmute', 'ended']) {
+    track.addEventListener(event, () => {
+      if (selectedRole === 'camera') updateMicrophoneStatus(track);
+    });
+  }
 }
 
 async function loadIceConfiguration() {
@@ -331,16 +418,18 @@ async function startCamera() {
   selectedRole = 'camera';
   cameraStatus.textContent = '';
   $('#start-camera').disabled = true;
+  let meterContext;
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('Este navegador não oferece acesso à câmera. Abra o site em HTTPS.');
-    const video = {
-      ...(cameraSelect.value ? { deviceId: { exact: cameraSelect.value } } : { facingMode: cameraFacing }),
-      width: { ideal: 1280 },
-      height: { ideal: 720 }
-    };
-    const audio = microphoneSelect.value ? { deviceId: { exact: microphoneSelect.value } } : true;
-    localStream = await navigator.mediaDevices.getUserMedia({ audio, video });
+    meterContext = createMicrophoneAudioContext();
+    localStream = await navigator.mediaDevices.getUserMedia(createCameraMediaConstraints({
+      cameraDeviceId: cameraSelect.value,
+      microphoneDeviceId: microphoneSelect.value,
+      cameraFacing
+    }));
     cameraVideo.srcObject = localStream;
+    startMicrophoneMeter(localStream.getAudioTracks()[0], meterContext);
+    meterContext = undefined;
     $('#camera-placeholder').hidden = true;
     $('#camera-live').hidden = false;
     await refreshDevices();
@@ -350,7 +439,9 @@ async function startCamera() {
     socket.send(JSON.stringify({ type: 'create' }));
   } catch (error) {
     cameraStatus.textContent = explainError(error);
+    meterContext?.close().catch(() => {});
     if (localStream) {
+      stopMicrophoneMeter();
       for (const track of localStream.getTracks()) track.stop();
       localStream = undefined;
       cameraVideo.srcObject = null;
@@ -426,10 +517,20 @@ function updateDeviceList(select, devices, defaultLabel) {
 
 async function replaceDevice(kind, deviceId) {
   if (!localStream) return;
+  let meterContext;
   try {
+    if (kind === 'audio') meterContext = createMicrophoneAudioContext();
     const constraints = kind === 'video'
       ? { video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: cameraFacing }, audio: false }
-      : { audio: deviceId ? { deviceId: { exact: deviceId } } : true, video: false };
+      : {
+          audio: {
+            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+            echoCancellation: { ideal: false },
+            noiseSuppression: { ideal: false },
+            autoGainControl: { ideal: false }
+          },
+          video: false
+        };
     const replacement = await navigator.mediaDevices.getUserMedia(constraints);
     const nextTrack = kind === 'video' ? replacement.getVideoTracks()[0] : replacement.getAudioTracks()[0];
     const previousTrack = kind === 'video' ? localStream.getVideoTracks()[0] : localStream.getAudioTracks()[0];
@@ -442,10 +543,15 @@ async function replaceDevice(kind, deviceId) {
       previousTrack.stop();
     }
     localStream.addTrack(nextTrack);
+    if (kind === 'audio') {
+      startMicrophoneMeter(nextTrack, meterContext);
+      meterContext = undefined;
+    }
     replacement.getTracks().filter(track => track !== nextTrack).forEach(track => track.stop());
     if (kind === 'video') cameraVideo.srcObject = localStream;
     if (dataChannel?.readyState === 'open') sendControlMessage({ type: 'capabilities', capabilities: getCameraCapabilities() });
   } catch (error) {
+    meterContext?.close().catch(() => {});
     cameraStatus.textContent = `Não foi possível trocar o dispositivo: ${explainError(error)}`;
     await refreshDevices();
   }
@@ -472,6 +578,7 @@ async function applyRemoteControl(action, value) {
       sendControlMessage({ type: 'capabilities', capabilities: getCameraCapabilities() });
     } else if (action === 'mute' && audioTrack && typeof value === 'boolean') {
       audioTrack.enabled = !value;
+      updateMicrophoneStatus(audioTrack);
       sendControlMessage({ type: 'state', muted: true, value });
     } else if (action === 'resolution' && track && [360, 720, 1080].includes(value)) {
       const height = value;
@@ -540,14 +647,8 @@ function handleMonitorMessage(message) {
     socket?.close(1000, 'Pareamento recusado');
     socket = undefined;
   } else if (message.type === 'peer-disconnected') {
-    reportError('A câmera encerrou a conexão. Volte à tela inicial e peça um novo código para reconectar.');
-    $('#connection-badge').lastChild.textContent = ' Câmera desconectada';
-    $('#monitor-placeholder').textContent = 'A câmera encerrou a conexão.';
-    $('#monitor-placeholder').hidden = false;
-    $('#play-video').hidden = true;
-    enableRemoteControls(false);
-    if (peer) peer.close();
-    peer = undefined;
+    reportError('O navegador da câmera perdeu a sinalização. Mantenha as duas páginas abertas; se a conexão não voltar, será necessário parear novamente.');
+    $('#connection-badge').lastChild.textContent = ' Sinalização interrompida';
   } else if (message.type === 'expired') {
     monitorStatus.textContent = 'O código expirou. Peça outro código à câmera.';
   }
@@ -927,7 +1028,21 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', e
 
 updatePictureInPictureButton();
 refreshNotificationControls();
-window.addEventListener('pagehide', closeSession);
+function resumeVisibleMedia() {
+  if (document.visibilityState !== 'visible') return;
+  const audioTrack = localStream?.getAudioTracks()[0];
+  if (selectedRole === 'camera') {
+    updateMicrophoneStatus(audioTrack);
+    microphoneContext?.resume().catch(() => {});
+    if (cameraVideo.srcObject) cameraVideo.play().catch(() => {});
+  }
+  if (selectedRole === 'monitor' && remoteVideo.srcObject) playRemoteVideo();
+  if (peer && peer.connectionState !== 'connected' && selectedRole === 'monitor') {
+    $('#connection-detail').textContent = 'Página retomada. Aguardando o navegador restabelecer a conexão de mídia…';
+  }
+}
+document.addEventListener('visibilitychange', resumeVisibleMedia);
+window.addEventListener('pageshow', resumeVisibleMedia);
 window.addEventListener('hashchange', consumePairingFragment);
 consumePairingFragment();
 

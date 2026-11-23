@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gegcamera-static-v6';
+const CACHE_NAME = 'gegcamera-static-v7';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
   '/signal-inbox.js',
   '/picture-in-picture.js',
   '/local-notifications.js',
+  '/camera-media.js',
   '/vendor/qrcode.mjs',
   '/manifest.webmanifest',
   '/icon.svg',
