@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.git/
+test/
+README.md
+docker-compose.yml
+Caddyfile
+.dockerignore
